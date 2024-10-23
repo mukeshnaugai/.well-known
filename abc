@@ -1,0 +1,53 @@
+import android.os.Bundle;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class MainActivity extends AppCompatActivity {
+    private WebView webView;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        webView = findViewById(R.id.webview);
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.setWebViewClient(new WebViewClient());
+        webView.setWebChromeClient(new WebChromeClient());
+
+        // Add JavaScript interface
+        webView.addJavascriptInterface(new WebAppInterface(this), "Android");
+
+        // Load the webpage (you can replace this with your URL)
+        webView.loadUrl("https://example.com"); // Replace with actual URL or HTML
+
+        // Inject JavaScript to capture button click
+        webView.loadUrl("javascript:(function() {" +
+                "var buttons = document.getElementsByClassName('button Y_KH_primary PqtjV auto eAZfm gds-button');" +
+                "if(buttons.length > 0) {" +
+                "   buttons[0].addEventListener('click', function() {" +
+                "       Android.onButtonClick();" + // Call Android when the button is clicked
+                "   });" +
+                "}" +
+                "})()");
+    }
+
+    // JavaScript interface to interact with Android
+    public class WebAppInterface {
+        private final Context mContext;
+
+        WebAppInterface(Context context) {
+            mContext = context;
+        }
+
+        @JavascriptInterface
+        public void onButtonClick() {
+            // Handle button click event from the WebView
+            Toast.makeText(mContext, "Button Clicked!", Toast.LENGTH_SHORT).show();
+        }
+    }
+}
