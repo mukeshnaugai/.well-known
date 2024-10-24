@@ -9,6 +9,57 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
 
+webView.setWebChromeClient(new WebChromeClient() {
+    private WebView popupWebView;
+    private AlertDialog popupDialog;
+
+    @Override
+    public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+        // Create a new WebView for the popup
+        popupWebView = new WebView(view.getContext());
+        popupWebView.setWebViewClient(new WebViewClient());
+        popupWebView.getSettings().setJavaScriptEnabled(true);  // Enable JavaScript if needed
+
+        // Create and show the dialog
+        AlertDialog.Builder builder = new AlertDialog.Builder(view.getContext());
+        builder.setView(popupWebView);
+        popupDialog = builder.create();
+
+        // Set a dismiss listener on the dialog
+        popupDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                // Handle dialog dismissal
+                if (popupWebView != null) {
+                    popupWebView.destroy();  // Destroy the popup WebView to clean up resources
+                    popupWebView = null;
+                }
+            }
+        });
+
+        popupDialog.show();  // Show the dialog
+
+        // Transport the new WebView to handle the new window content
+        WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+        transport.setWebView(popupWebView);
+        resultMsg.sendToTarget();
+
+        return true;  // Indicate that the popup window was created successfully
+    }
+
+    @Override
+    public void onCloseWindow(WebView window) {
+        // This is the callback from the WebView itself
+        if (popupDialog != null && popupDialog.isShowing()) {
+            popupDialog.dismiss();  // Dismiss the dialog if the WebView's onCloseWindow is called
+        }
+        super.onCloseWindow(window);  // Call the parent method for additional cleanup if needed
+    }
+});
+
+
+
+
 webView.evaluateJavascript("javascript:(function() {" +
             "var observer = new MutationObserver(function(mutations) {" +
             "    mutations.forEach(function(mutation) {" +
