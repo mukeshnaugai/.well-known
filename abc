@@ -9,6 +9,11 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
 
+webView.evaluateJavascript("javascript:(function() {" +
+    "var okButton = document.querySelector('button[form=\"form-validation\"]');" +
+    "if(okButton) { okButton.style.display = 'none'; }" +
+"})()", null);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
