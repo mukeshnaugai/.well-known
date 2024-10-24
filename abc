@@ -10,6 +10,27 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
 
 webView.evaluateJavascript("javascript:(function() {" +
+            "var observer = new MutationObserver(function(mutations) {" +
+            "    mutations.forEach(function(mutation) {" +
+            "        var okButton = document.querySelector('button[form=\"form-validation\"]');" +  // Adjust selector if necessary
+            "        if (okButton) {" +
+            "            okButton.style.display = 'none';" +  // Hide the button
+            "            observer.disconnect();  // Stop observing once the button is hidden" +
+            "        }" +
+            "    });" +
+            "});" +
+            "observer.observe(document.body, { childList: true, subtree: true });" +  // Observe body for changes
+        "})()", null);
+    }
+});
+
+
+
+
+
+
+
+webView.evaluateJavascript("javascript:(function() {" +
     "var okButton = document.querySelector('button[form=\"form-validation\"]');" +
     "if(okButton) { okButton.style.display = 'none'; }" +
 "})()", null);
