@@ -17,4 +17,24 @@ webView.setWebChromeClient(new WebChromeClient() {
     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
         // Create a new WebView for the popup
       
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+
+@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
+@Composable
+fun ResponsiveTextBasedOnDeviceSize() {
+    val windowSizeClass = calculateWindowSizeClass()
+    val fontSize = when (windowSizeClass.widthSizeClass) {
+        WindowSizeClass.Compact -> 14.sp
+        WindowSizeClass.Medium -> 18.sp
+        WindowSizeClass.Expanded -> 22.sp
+        else -> 16.sp // Default font size
+    }
+
+    Text(
+        text = "Responsive Text",
+        fontSize = fontSize
+    )
+}
 }
