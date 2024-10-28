@@ -1,40 +1,33 @@
-import android.os.Bundle;
-import android.webkit.WebChromeClient;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.JavascriptInterface;
-import android.widget.Toast;
-import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
-    private WebView webView;
+val builder = AlertDialog.Builder(binding.webView.context)
 
-webView.setWebChromeClient(new WebChromeClient() {
-    private WebView popupWebView;
-    private AlertDialog popupDialog;
+// Set the WebView background to white (solid)
+windowWebView.setBackgroundColor(Color.WHITE)
 
-    @Override
-    public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
-        // Create a new WebView for the popup
-      
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
+// Create the dialog and set the WebView as its content
+builder.setView(windowWebView)
+popupDialog = builder.create()
 
-@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
-@Composable
-fun ResponsiveTextBasedOnDeviceSize() {
-    val windowSizeClass = calculateWindowSizeClass()
-    val fontSize = when (windowSizeClass.widthSizeClass) {
-        WindowSizeClass.Compact -> 14.sp
-        WindowSizeClass.Medium -> 18.sp
-        WindowSizeClass.Expanded -> 22.sp
-        else -> 16.sp // Default font size
+// Set dismiss listener on the dialog to handle cleanup
+popupDialog.setOnDismissListener {
+    if (windowWebView != null) {
+        windowWebView.destroy()  // Destroy the WebView to free resources
+        windowWebView = null
     }
+}
 
-    Text(
-        text = "Responsive Text",
-        fontSize = fontSize
-    )
+// Ensure the dialog has a solid white background (no transparency)
+popupDialog.window?.setBackgroundDrawable(ColorDrawable(Color.WHITE))
+
+// Show the dialog
+popupDialog.show()
+
+// If needed, add the WebView to your container view
+if (windowWebView.parent == null) {
+    binding.container.addView(windowWebView)
 }
-}
+binding.webView.visibility = View.GONE
+
+// Set the WebView transport
+transport.webView = windowWebView
+resultMsg.sendToTarget()
