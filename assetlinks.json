@@ -1,1 +1,127 @@
 
+To use PDFTron in your Android application, you’ll need to follow a series of steps to integrate the library, initialize it, and render PDFs that include editable fields. Here’s a detailed guide on how to set up PDFTron in your Android project:
+
+Step 1: Add PDFTron to Your Project
+
+	1.	Get a PDFTron License: Before you start, you need to sign up for a license from the PDFTron website. They offer a trial version that you can use for development.
+	2.	Add Dependency: Add PDFTron to your build.gradle file. As of now, you can use the following dependency:
+
+dependencies {
+    implementation 'com.pdftron:pdftron:9.0.0' // Check for the latest version
+}
+
+
+	3.	Sync Your Project: Sync your project with Gradle to download the library.
+
+Step 2: Initialize PDFTron SDK
+
+You need to initialize the PDFTron SDK in your application. Typically, this is done in your Application class or MainActivity.
+
+import com.pdftron.pdf.PDFNetException;
+import com.pdftron.pdf.PDFNet;
+
+public class MyApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        
+        try {
+            PDFNet.initialize(this); // Initialize PDFTron
+        } catch (PDFNetException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+Step 3: Create an Activity to Display PDF
+
+You will need to create an activity to display the PDF document. Here’s an example of how to set up a basic PDF viewing activity.
+
+import android.os.Bundle;
+import androidx.appcompat.app.AppCompatActivity;
+import com.pdftron.pdf.PDFDoc;
+import com.pdftron.pdf.PDFViewCtrl;
+import com.pdftron.pdf.controls.PdfViewCtrlTabHost;
+import com.pdftron.pdf.controls.PdfViewCtrlTabHostFragment;
+
+public class PdfViewerActivity extends AppCompatActivity {
+
+    private PDFViewCtrl pdfViewCtrl;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_pdf_viewer);
+
+        // Initialize PDFViewCtrl
+        pdfViewCtrl = new PDFViewCtrl(this);
+        setContentView(pdfViewCtrl);
+        
+        // Load the PDF document
+        loadPdf("path/to/your/pdf/file.pdf");
+    }
+
+    private void loadPdf(String path) {
+        try {
+            PDFDoc pdfDoc = new PDFDoc(path);
+            pdfViewCtrl.setDoc(pdfDoc); // Set the document to the PDFViewCtrl
+        } catch (PDFNetException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        pdfViewCtrl.release(); // Release the PDFViewCtrl
+    }
+}
+
+Step 4: Handle Permissions (for Android 6.0 and above)
+
+If you are loading PDFs from external storage, make sure to request runtime permissions.
+
+private void checkPermissions() {
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE);
+    } else {
+        // Load your PDF here
+        loadPdf("path/to/your/pdf/file.pdf");
+    }
+}
+
+Step 5: Handling Form Fields
+
+If your PDF contains form fields, PDFTron will allow users to interact with them. When the PDF document is loaded, users can fill in forms, check boxes, etc.
+
+Example XML Layout for Activity
+
+Here’s a simple XML layout for the PdfViewerActivity:
+
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    
+    <!-- PDFViewCtrl will be added programmatically in the activity -->
+</RelativeLayout>
+
+Step 6: Test Your Application
+
+Run your application on an Android device or emulator. Make sure the PDF file you are trying to load is accessible, and you have the necessary permissions to read it. You should be able to view the PDF and interact with any form fields it contains.
+
+Additional Features
+
+PDFTron offers a wide range of features, including:
+
+	•	Annotations
+	•	Redaction
+	•	Digital signatures
+	•	Form filling and saving
+	•	PDF creation and editing
+
+You can explore more features in the PDFTron documentation and incorporate them as needed.
+
+Conclusion
+
+Using PDFTron in your Android application allows for robust PDF handling capabilities, including the ability to display and fill out editable fields. Ensure you have the necessary permissions and follow best practices for user experience in handling PDF files.
