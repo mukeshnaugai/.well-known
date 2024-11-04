@@ -1,0 +1,52 @@
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import androidx.window.layout.WindowMetricsCalculator
+import androidx.window.layout.WindowSizeClass
+import androidx.window.layout.WindowWidthSizeClass
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Get the current window metrics to calculate size class
+        val windowMetrics = WindowMetricsCalculator.getOrCreate()
+            .computeCurrentWindowMetrics(this)
+        val windowSizeClass = WindowSizeClass.calculateFromSize(
+            width = windowMetrics.bounds.width(),
+            height = windowMetrics.bounds.height()
+        )
+
+        setContent {
+            ResponsiveText(windowSizeClass)
+        }
+    }
+}
+
+@Composable
+fun ResponsiveText(windowSizeClass: WindowSizeClass) {
+    val fontSize = when (windowSizeClass.widthSizeClass) {
+        WindowWidthSizeClass.Compact -> 16.sp  // Small text for phones
+        WindowWidthSizeClass.Medium -> 20.sp   // Medium text for small tablets
+        WindowWidthSizeClass.Expanded -> 24.sp // Large text for large tablets/desktops
+        else -> 16.sp                          // Default text size
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Responsive Text Example",
+            style = TextStyle(
+                fontSize = fontSize,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        )
+    }
+}
