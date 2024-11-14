@@ -36,3 +36,72 @@ class MainActivity : AppCompatActivity() {
             // Permissions 
 
 
+import android.content.SharedPreferences
+import org.junit.Before
+import org.junit.Test
+import org.mockito.Mockito
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class WhatsNewHelperTest {
+
+    private lateinit var sharedPreferences: SharedPreferences
+    private lateinit var editor: SharedPreferences.Editor
+    private lateinit var whatsNewHelper: WhatsNewHelper
+
+    @Before
+    fun setUp() {
+        // Mock SharedPreferences and its editor
+        sharedPreferences = Mockito.mock(SharedPreferences::class.java)
+        editor = Mockito.mock(SharedPreferences.Editor::class.java)
+        `when`(sharedPreferences.edit()).thenReturn(editor)
+        `when`(editor.putString(Mockito.anyString(), Mockito.anyString())).thenReturn(editor)
+
+        // Initialize WhatsNewHelper with the mocked SharedPreferences
+        whatsNewHelper = WhatsNewHelper(sharedPreferences)
+    }
+
+    @Test
+    fun `should show What's New screen when version is new`() {
+        // Given a current version that is different from the last seen version
+        val currentVersion = "1.2.0"
+        `when`(sharedPreferences.getString("LAST_SEEN_VERSION", "")).thenReturn("1.1.0")
+
+        // When checking if the "What's New" screen should be shown
+        val result = whatsNewHelper.shouldShowWhatsNewScreen(currentVersion)
+
+        // Then it should return true
+        assertTrue(result)
+    }
+
+    @Test
+    fun `should not show What's New screen when version is the same`() {
+        // Given the current version is the same as the last seen version
+        val currentVersion = "1.2.0"
+        `when`(sharedPreferences.getString("LAST_SEEN_VERSION", "")).thenReturn(currentVersion)
+
+        // When checking if the "What's New" screen should be shown
+        val result = whatsNewHelper.shouldShowWhatsNewScreen(currentVersion)
+
+        // Then it should return false
+        assertFalse(result)
+    }
+
+    @Test
+    fun `should save the current version when dismissing the What's New screen`() {
+        // Given a current version
+        val currentVersion = "1.2.0"
+
+        // When dismissing the "What's New" screen
+        whatsNewHelper.dismissWhatsNewScreen(currentVersion)
+
+        // Then verify the current version is saved in SharedPreferences
+        verify(editor).putString("LAST_SEEN_VERSION", currentVersion)
+        verify(editor).apply()
+    }
+}
+
+
+
