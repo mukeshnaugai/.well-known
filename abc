@@ -1,105 +1,72 @@
-
-
-binding.webView.visibility = View.GONE
-
-// Set the WebView transport
-transport.webView = windowWebView
-resultMsg.sendToTarget()
-
-
-
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-
-class MainActivity : AppCompatActivity() {
-
-    companion object {
-        const val PERMISSION_REQUEST_CODE = 1001
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // Check for permissions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkPermissions()) {
-                // Permissions are granted, proceed with your file operations
-            } else {
-                requestPermissions()
-            }
-        } else {
-            // Permissions 
-
-
+import android.content.Context
 import android.content.SharedPreferences
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import io.mockk.*
+import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import org.mockito.Mockito
-import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when`
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
-class WhatsNewHelperTest {
+class HomeActivityViewModelTest {
 
+    @get:Rule
+    val rule = InstantTaskExecutorRule() // For LiveData testing
+
+    private lateinit var viewModel: HomeActivityViewModel
+    private lateinit var context: Context
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var editor: SharedPreferences.Editor
-    private lateinit var whatsNewHelper: WhatsNewHelper
 
     @Before
     fun setUp() {
-        // Mock SharedPreferences and its editor
-        sharedPreferences = Mockito.mock(SharedPreferences::class.java)
-        editor = Mockito.mock(SharedPreferences.Editor::class.java)
-        `when`(sharedPreferences.edit()).thenReturn(editor)
-        `when`(editor.putString(Mockito.anyString(), Mockito.anyString())).thenReturn(editor)
+        context = mockk()
+        sharedPreferences = mockk()
+        editor = mockk()
 
-        // Initialize WhatsNewHelper with the mocked SharedPreferences
-        whatsNewHelper = WhatsNewHelper(sharedPreferences)
+        every { context.getSharedPreferences(any(), any()) } returns sharedPreferences
+        every { sharedPreferences.getString(any(), any()) } returns null
+        every { sharedPreferences.edit() } returns editor
+        every { editor.putString(any(), any()) } returns editor
+        every { editor.apply() } just runs
+
+        viewModel = HomeActivityViewModel(context)
     }
 
     @Test
-    fun `should show What's New screen when version is new`() {
-        // Given a current version that is different from the last seen version
-        val currentVersion = "1.2.0"
-        `when`(sharedPreferences.getString("LAST_SEEN_VERSION", "")).thenReturn("1.1.0")
+    fun `isAppUpdated returns true when version is updated`() {
+        // Mock version behavior
+        every { sharedPreferences.getString("VERSION_NAME", "0.0") } returns "1.0"
+        mockkStatic(BuildConfig::class)
+        every { BuildConfig.VERSION_NAME } returns "2.0"
 
-        // When checking if the "What's New" screen should be shown
-        val result = whatsNewHelper.shouldShowWhatsNewScreen(currentVersion)
+        val result = viewModel.isAppUpdated(context)
 
-        // Then it should return true
         assertTrue(result)
+        verify { editor.putString("VERSION_NAME", "2.0") }
     }
 
     @Test
-    fun `should not show What's New screen when version is the same`() {
-        // Given the current version is the same as the last seen version
-        val currentVersion = "1.2.0"
-        `when`(sharedPreferences.getString("LAST_SEEN_VERSION", "")).thenReturn(currentVersion)
+    fun `isAppUpdated returns false when version is not updated`() {
+        // Mock version behavior
+        every { sharedPreferences.getString("VERSION_NAME", "0.0") } returns "2.0"
+        mockkStatic(BuildConfig::class)
+        every { BuildConfig.VERSION_NAME } returns "2.0"
 
-        // When checking if the "What's New" screen should be shown
-        val result = whatsNewHelper.shouldShowWhatsNewScreen(currentVersion)
+        val result = viewModel.isAppUpdated(context)
 
-        // Then it should return false
         assertFalse(result)
     }
 
     @Test
-    fun `should save the current version when dismissing the What's New screen`() {
-        // Given a current version
-        val currentVersion = "1.2.0"
+    fun `isNewMajorVersion returns true when major version is updated`() {
+        val result = viewModel.isNewMajorVersion("1.0", "2.0")
+        assertTrue(result)
+    }
 
-        // When dismissing the "What's New" screen
-        whatsNewHelper.dismissWhatsNewScreen(currentVersion)
-
-        // Then verify the current version is saved in SharedPreferences
-        verify(editor).putString("LAST_SEEN_VERSION", currentVersion)
-        verify(editor).apply()
+    @Test
+    fun `isNewMajorVersion returns false when version is same`() {
+        val result = viewModel.isNewMajorVersion("1.0", "1.0")
+        assertFalse(result)
     }
 }
 
