@@ -1,1 +1,119 @@
 
+1. Setup Gradle
+
+Add Hilt dependencies in build.gradle (Module)
+
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+}
+
+dependencies {
+    implementation "com.google.dagger:hilt-android:2.48"
+    kapt "com.google.dagger:hilt-compiler:2.48"
+}
+
+Add Hilt Plugin in build.gradle (Project)
+
+buildscript {
+    dependencies {
+        classpath "com.google.dagger:hilt-android-gradle-plugin:2.48"
+    }
+}
+
+2. Application Class
+
+Annotate your Application class with @HiltAndroidApp to initialize Hilt.
+
+@HiltAndroidApp
+class MyApplication : Application()
+
+3. Repository
+
+Create a Repository class that requires the Context.
+
+@Singleton
+class MyRepository @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    fun getAppName(): String {
+        return context.getString(R.string.app_name)
+    }
+}
+
+4. ViewModel
+
+Create a ViewModel that uses the Repository.
+
+@HiltViewModel
+class MyViewModel @Inject constructor(
+    private val repository: MyRepository
+) : ViewModel() {
+
+    fun fetchAppName(): String {
+        return repository.getAppName()
+    }
+}
+
+5. Activity
+
+Inject the ViewModel into your Activity using Hilt.
+
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity() {
+
+    private val viewModel: MyViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Example usage
+        val appName = viewModel.fetchAppName()
+        Toast.makeText(this, "App Name: $appName", Toast.LENGTH_LONG).show()
+    }
+}
+
+6. XML Layout for Activity
+
+res/layout/activity_main.xml:
+
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/textView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Hello World!"
+        android:textSize="18sp"/>
+</LinearLayout>
+
+7. Manifest
+
+Ensure your Application class is registered in the AndroidManifest.xml.
+
+<application
+    android:name=".MyApplication"
+    android:icon="@mipmap/ic_launcher"
+    android:label="@string/app_name"
+    android:theme="@style/Theme.AppCompat.Light">
+    <activity android:name=".MainActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
+
+8. Run the App
+
+When you run the app, it should display the app name (@string/app_name) in a Toast message using the Context that was passed through the Repository to the ViewModel.
+
+This demonstrates the use of Hilt for dependency injection while adhering to clean architecture principles.
