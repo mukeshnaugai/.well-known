@@ -1,4 +1,4 @@
-import android.os.Bundle
+kimport android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -48,5 +48,55 @@ fun ResponsiveText(windowSizeClass: WindowSizeClass) {
                 color = MaterialTheme.colorScheme.onBackground
             )
         )
+    }
+}
+
+@Throws(IOException::class)
+private fun convertBase64StringToPdfAndStoreIt(base64Pdf: String, webURL: String) {
+    // Determine the file name and folder location
+    val fileName = if (webURL.contains(context.getString(R.string.beneficiary_change))) {
+        "glic_customer_doc.pdf"
+    } else {
+        "glic_customer_doc_temp.pdf"
+    }
+
+    val downloadDir: File = File(
+        if (webURL.contains(context.getString(R.string.beneficiary_change))) {
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        } else {
+            context.cacheDir
+        },
+        fileName
+    )
+
+    // Handle duplicate files by appending an index to the file name
+    var uniqueFile = downloadDir
+    var fileIndex = 1
+    while (uniqueFile.exists()) {
+        uniqueFile = File(
+            uniqueFile.parent,
+            "${fileName.substringBeforeLast(".")}_$fileIndex.${fileName.substringAfterLast(".")}"
+        )
+        fileIndex++
+    }
+
+    // Decode Base64 string and write it to the file
+    val pdfAsBytes = Base64.decode(
+        base64Pdf.replaceFirst("data:.*;base64,".toRegex(), ""),
+        Base64.DEFAULT
+    )
+
+    uniqueFile.outputStream().use { os ->
+        os.write(pdfAsBytes)
+        os.flush()
+    }
+
+    // Notify user and handle further actions
+    if (uniqueFile.exists()) {
+        if (webURL.contains(context.getString(R.string.beneficiary_change))) {
+            Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
+        } else {
+            openRemotePDFScreen(uniqueFile)
+        }
     }
 }
