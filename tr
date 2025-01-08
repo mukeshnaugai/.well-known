@@ -15,7 +15,8 @@ import androidx.window.layout.WindowWidthSizeClass
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(savedInstanceState
+)
 
         // Get the current window metrics to calculate size class
         val windowMetrics = WindowMetricsCalculator.getOrCreate()
@@ -99,4 +100,46 @@ private fun convertBase64StringToPdfAndStoreIt(base64Pdf: String, webURL: String
             openRemotePDFScreen(uniqueFile)
         }
     }
+}
+fun savePdfToDownloads(context: Context, base64Pdf: String, fileName: String) {
+    val resolver = context.contentResolver
+    val downloadsUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+    // Check if file exists and delete it
+    val existingUri = resolver.query(
+        downloadsUri,
+        arrayOf(MediaStore.MediaColumns._ID),
+        "${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
+        arrayOf(fileName),
+        null
+    )?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+            MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY, id)
+        } else null
+    }
+
+    existingUri?.let { resolver.delete(it, null, null) }
+
+    // Decode Base64 string
+    val pdfAsBytes = Base64.decode(
+        base64Pdf.replaceFirst("data:.*;base64,".toRegex(), ""),
+        Base64.DEFAULT
+    )
+
+    // Create ContentValues for the new file
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+    }
+
+    // Insert the file and write its content
+    val uri = resolver.insert(downloadsUri, contentValues)
+    uri?.let {
+        resolver.openOutputStream(it).use { outputStream ->
+            outputStream?.write(pdfAsBytes)
+        }
+        Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
+    } ?: throw IOException("Failed to create file")
 }
