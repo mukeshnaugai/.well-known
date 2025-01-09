@@ -143,3 +143,18 @@ fun savePdfToDownloads(context: Context, base64Pdf: String, fileName: String) {
         Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
     } ?: throw IOException("Failed to create file")
 }
+
+
+try {
+    val uri = resolver.insert(downloadsUri, contentValues)
+    uri?.let {
+        resolver.openOutputStream(it).use { outputStream ->
+            outputStream?.write(pdfAsBytes)
+        }
+        Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
+    } ?: throw IOException("Failed to create file")
+} catch (e: IOException) {
+    // Show a Toast with the exception message
+    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+    e.printStackTrace() // Log the exception for debugging
+}
