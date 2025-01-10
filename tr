@@ -170,3 +170,19 @@ setContent {
     NavigationGraph(routeScreen)
 }
 
+ lifecycleScope.launch {
+            homeActivityViewModel.isAppUpdated.collect{
+               k= if (it){
+                    Screen.WhatsNewScreen.route
+                }
+                else{
+                    Screen.MainScreen.route
+                }
+           
+            }
+            
+        }
+        setContent{
+            NavigationGraph(k)
+        }
+
