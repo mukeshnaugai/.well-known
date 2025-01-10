@@ -158,3 +158,15 @@ try {
     Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
     e.printStackTrace() // Log the exception for debugging
 }
+setContent {
+    // Observe the state directly and let Compose handle recompositions
+    val routeScreen by homeActivityViewModel.isAppUpdated
+        .map { appUpdated ->
+            if (appUpdated) Screen.WhatsNewScreen.route else Screen.MainScreen.route
+        }
+        .collectAsState(initial = Screen.MainScreen.route)
+
+    // Pass the state to the NavigationGraph
+    NavigationGraph(routeScreen)
+}
+
