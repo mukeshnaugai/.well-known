@@ -1,127 +1,487 @@
+package com.jlr.jea.systembar.rccd.drawer
 
-To use PDFTron in your Android application, you’ll need to follow a series of steps to integrate the library, initialize it, and render PDFs that include editable fields. Here’s a detailed guide on how to set up PDFTron in your Android project:
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.jlr.jea.climate.ui.rccd.data.RCCDInputEnums.Companion.FCCD
+import com.jlr.jea.climate.ui.state.DistributionSeat
+import com.jlr.jea.climate.ui.state.DistributionStateHandler
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler
+import com.jlr.jea.core.SeatPosition
+import com.jlr.jea.core.logger.JeaLogger
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_MAX_VALUE
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_MIN_VALUE_ZONE_DUAL
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+import com.jlr.systembar.core.api.coroutines.CoroutineDispatchers
+import com.jlr.systembar.core.api.coroutines.Dispatcher
+import com.jlr.systembar.core.api.coroutines.Dispatcher.DEFAULT
+import com.jlr.systembar.core.api.extension.collect
+import com.jlr.systembar.core.api.extension.logDebug
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.FanDirection.Companion.FACE
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IEfficientAutoState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACACState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACAutoState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACDistributionState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACDualState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACMaxACState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACMaxDefrostState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACPowerState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACTempState
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatSelection
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.temperature.ISeatClimateAvailability
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.temperature.ISeatClimateIntensityLevel
+import com.jlr.systembar.vehiclecontrols.api.exterior.access_setting.IFamilySettingUseCase
+import com.jlr.systembar.vehiclecontrols.api.exterior.outsidetemperature.ITemperatureUnitState
+import com.jlr.systembar.vehiclecontrols.api.offroad.drivemodes.ILowPowerModeUseCase
+import com.jlr.systembar.vehiclecontrols.api.offroad.drivemodes.IValetModeUseCase
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.EfficientAutoMode
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacDistributionState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacRecircState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacSyncState
+import com.jlr.systembar.vehiclecontrols.data.exterior.glovebox.GloveBoxState
+import com.jlr.systembar.vehiclecontrols.data.offroad.drivemodes.valetmode.ValetModeState
+import com.jlr.systembar.vehiclecontrols.data.vehiclestate.GearSelection
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-Step 1: Add PDFTron to Your Project
+/**
+ * View model for Top Drawer Inflater
+ *
+ * @property hvacAutoBlowerUseCase
+ * @property hvacACUseCase
+ * @property hvacMaxAcUseCase
+ * @property hvacDefoggerUseCase
+ * @property powerUseCase
+ * @property hvacDualUseCase
+ * @property hvacAutoUseCase
+ * @property hvacTempUseCase
+ * @property maxDefrostState
+ * @property hvacDistributionStateUseCase
+ * @property hvacClimatePreconditionUseCase
+ * @property coroutineScope
+ */
+class RccdTopDrawerViewModel @Inject constructor(
+    @CoroutineDispatchers(Dispatcher.MAIN) private val mainDispatcher: CoroutineDispatcher,
+    @CoroutineDispatchers(DEFAULT) private val default: CoroutineDispatcher,
+    @ApplicationContext val context: Context,
+    private val hvacACUseCase: IHVACACState,
+    private val hvacMaxAcUseCase: IHVACMaxACState,
+    private val powerUseCase: IHVACPowerState,
+    private val hvacDualUseCase: IHVACDualState,
+    private val hvacAutoUseCase: IHVACAutoState,
+    private val hvacTempUseCase: IHVACTempState,
+    private val maxDefrostState: IHVACMaxDefrostState,
+    private val hvacDistributionStateUseCase: IHVACDistributionState,
+    private val efficientAutoState: IEfficientAutoState,
+    private val coroutineScope: CoroutineScope,
+    private val seatClimateInfo: ISeatClimateAvailability,
+    private val climateIntensity: ISeatClimateIntensityLevel,
+    private val familySettingUsecase: IFamilySettingUseCase,
+    private val valetModeUseCase: IValetModeUseCase,
+    private val tempState: ITemperatureUnitState,
+    private val lowPowerModeUseCase: ILowPowerModeUseCase,
+    val scope:CoroutineScope
+    ) : ViewModel() {
 
-	1.	Get a PDFTron License: Before you start, you need to sign up for a license from the PDFTron website. They offer a trial version that you can use for development.
-	2.	Add Dependency: Add PDFTron to your build.gradle file. As of now, you can use the following dependency:
+    private val tempValue = -1
+    val defrostButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val rearRowLeftTemperature: MutableStateFlow<Float> =
+        MutableStateFlow(TemperatureStateHandler.TEMPERATURE_DEFAULT_VALUE)
+    val recirculationButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val syncButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val rearRowRightTemperature: MutableStateFlow<Float> =
+        MutableStateFlow(TemperatureStateHandler.TEMPERATURE_DEFAULT_VALUE)
+    val frontAutoButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val maxAcButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val acButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var hvacEfficientAutoMode: MutableStateFlow<EfficientAutoMode?> = MutableStateFlow<EfficientAutoMode?>(null)
+    var hvacRecircState by mutableStateOf<HvacRecircState?>(null)
+    var frontDefoggerState by mutableStateOf<Boolean>(false)
+    var rearDefoggerState by mutableStateOf<Boolean>(false)
+    private var firstLaunch by mutableStateOf(true)
+    var feedbackMessage by mutableStateOf(false)
+    private var lastInteractionTime by mutableStateOf(0L)
+    var climateCoolFitment by mutableStateOf(false)
+    var rearLeftSeatTemperatures by mutableStateOf<Float>(0f)
+    var rearRightSeatTemperatures by mutableStateOf<Float>(0f)
+    var decrementPassengerButtonStateDisabled by  mutableStateOf(true)
+    var incrementPassengerButtonStateDisabled by mutableStateOf(true)
+    var decrementDriverButtonStateDisabled by  mutableStateOf(true)
+    var incrementDriverButtonStateDisabled by mutableStateOf(true)
+    var minIntensityListValue by mutableStateOf<Float>(TEMPERATURE_MIN_VALUE_ZONE_DUAL)
+    var gearStatus by mutableStateOf<GearSelection?>(null)
+    var gloveboxState by mutableStateOf<GloveBoxState?>(null)
+    var showGloveBoxToast by mutableStateOf(false)
+    var gloveBoxDoubleClick by mutableStateOf(false)
+    var rearConvenienceLockState by mutableStateOf(false)
+    val rccdHomeScreenLockTimerStatus: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val rccdHomeScreenLockType: MutableStateFlow<RccdTopDrawerInflater.RccdLockType> = MutableStateFlow(RccdTopDrawerInflater.RccdLockType.RCCD_NO_LOCK)
+    val rearLeftAcDistributionState: MutableStateFlow<HvacDistributionState> = MutableStateFlow(HvacDistributionState(FACE))
+    private var valetModeState by mutableStateOf<ValetModeState?>(null)
+    var isValetModeActivated by mutableStateOf(false)
+    var valetModeAvailability by mutableStateOf(false)
+    var lowPowerModeEnabled by mutableStateOf(false)
+    val climateRearRowPowerState: MutableStateFlow<Boolean> = MutableStateFlow(true)
+    var isDrawerSlidable by mutableStateOf(true)
+    var isDriverTemperatureSelected by mutableStateOf(true)
+    var isTemperatureCelcius by mutableStateOf<Boolean?>(null)
+    var hvacSyncState by mutableStateOf<HvacSyncState?>(null)
 
-dependencies {
-    implementation 'com.pdftron:pdftron:9.0.0' // Check for the latest version
-}
+    /**
+     * @property temperatureStateHandler Contains State and business logic
+     *    integration for Temperature screen
+     */
+    val temperatureStateHandler: TemperatureStateHandler = TemperatureStateHandler(
+        hvacACUseCase = hvacACUseCase,
+        hvacMaxAcUseCase = hvacMaxAcUseCase,
+        coroutineScope = viewModelScope,
+        hvacPowerState = powerUseCase,
+        hvacTempUseCase = hvacTempUseCase,
+        tempState = tempState,
+        lowPowerModeUseCase = lowPowerModeUseCase,
+        context = context
+    )
 
+    val distributionStateHandler: DistributionStateHandler = DistributionStateHandler(
+        coroutineScope = viewModelScope,
+        hvacDistributionUseCase = hvacDistributionStateUseCase,
+        lowPowerModeUseCase = lowPowerModeUseCase
+    )
 
-	3.	Sync Your Project: Sync your project with Gradle to download the library.
-
-Step 2: Initialize PDFTron SDK
-
-You need to initialize the PDFTron SDK in your application. Typically, this is done in your Application class or MainActivity.
-
-import com.pdftron.pdf.PDFNetException;
-import com.pdftron.pdf.PDFNet;
-
-public class MyApplication extends Application {
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        
-        try {
-            PDFNet.initialize(this); // Initialize PDFTron
-        } catch (PDFNetException e) {
-            e.printStackTrace();
+    private fun collectLPMState() {
+        JeaLogger.debug("collect LPM State ${this@RccdTopDrawerViewModel.hashCode()}")
+        lowPowerModeUseCase.lowPowerModeState.collect(
+            coroutineScope = scope, dispatcher = default
+        ) {
+            withContext(mainDispatcher) { lowPowerModeEnabled = this@collect.isLPMEnable }
         }
     }
-}
 
-Step 3: Create an Activity to Display PDF
-
-You will need to create an activity to display the PDF document. Here’s an example of how to set up a basic PDF viewing activity.
-
-import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import com.pdftron.pdf.PDFDoc;
-import com.pdftron.pdf.PDFViewCtrl;
-import com.pdftron.pdf.controls.PdfViewCtrlTabHost;
-import com.pdftron.pdf.controls.PdfViewCtrlTabHostFragment;
-
-public class PdfViewerActivity extends AppCompatActivity {
-
-    private PDFViewCtrl pdfViewCtrl;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_pdf_viewer);
-
-        // Initialize PDFViewCtrl
-        pdfViewCtrl = new PDFViewCtrl(this);
-        setContentView(pdfViewCtrl);
-        
-        // Load the PDF document
-        loadPdf("path/to/your/pdf/file.pdf");
+    init {
+        collectTemperatureUnitType()
+        initRearLeftTemp()
+        initMaxDefrostState()
+        initSyncState()
+        initRearRightTemp()
+        initFrontAutoState()
+        initHvacEfficientAuto()
+        infoCCFState()
+        initRearLockState()
+        initAcDistribution()
+        selectedSeatTemperatureIntensityState()
+        collectValetModeState()
+        collectLPMState()
+        collectRearPowerState()
+        distributionFromId()
+    }
+    private fun distributionFromId() {
+        distributionStateHandler.setDistributionFromId(DistributionSeat.SEAT_REAR.id)
     }
 
-    private void loadPdf(String path) {
-        try {
-            PDFDoc pdfDoc = new PDFDoc(path);
-            pdfViewCtrl.setDoc(pdfDoc); // Set the document to the PDFViewCtrl
-        } catch (PDFNetException e) {
-            e.printStackTrace();
+    private fun collectRearPowerState() {
+        coroutineScope.launch {
+            powerUseCase.rearPowerState.collect() {
+                it?.let {
+                    climateRearRowPowerState.emit(it.isRearOn)
+                }
+            }
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        pdfViewCtrl.release(); // Release the PDFViewCtrl
+    private fun collectValetModeState() {
+        valetModeUseCase.valetModeState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                valetModeState = this@collect
+                valetModeAvailability = valetModeState?.isValetModeAvailable ?: false
+                isValetModeActivated = valetModeState?.isValetModeActive ?: false
+            }
+        }
+    }
+
+    /** This method will sync seat temperature intensity state from backend */
+    private fun selectedSeatTemperatureIntensityState() {
+        climateIntensity.leftRearIntensity.collect(viewModelScope, default) {
+                withContext(mainDispatcher) {
+                    if (this@collect.state == tempValue) return@withContext
+                    rearLeftSeatTemperatures = getSelectedSeatTemperatureIntensity(this@collect.state)
+                    decrementDriverButtonStateDisabled = isMinTemp(rearLeftSeatTemperatures)
+                    incrementDriverButtonStateDisabled = isMaxTemp(rearLeftSeatTemperatures)
+                    logDebug("driver seat temperature value $rearLeftSeatTemperatures")
+                }
+            }
+
+        climateIntensity.rightRearIntensity.collect(viewModelScope, default) {
+                withContext(mainDispatcher) {
+                    if (this@collect.state == tempValue) return@withContext
+                    rearRightSeatTemperatures = getSelectedSeatTemperatureIntensity(this@collect.state)
+                    decrementPassengerButtonStateDisabled = isMinTemp(rearRightSeatTemperatures)
+                    incrementPassengerButtonStateDisabled = isMaxTemp(rearRightSeatTemperatures)
+                    logDebug("passenger seat temperature value $rearRightSeatTemperatures")
+                }
+            }
+    }
+
+    private fun isMinTemp(temperatureIntensity: Float): Boolean {
+        return temperatureIntensity == minIntensityListValue
+    }
+
+    private fun isMaxTemp(temperatureIntensity: Float): Boolean {
+        return temperatureIntensity == TEMPERATURE_MAX_VALUE
+    }
+
+    /**
+     * seat temperature intensity level state to temperature value switcher
+     * mapping
+     */
+    private fun getSelectedSeatTemperatureIntensity(temperatureIntensity: Int): Float {
+        return when (temperatureIntensity) {
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_OFF -> 0f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_1 -> 1f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_1 -> -1f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_2 -> 2f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_2 -> -2f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_3 -> 3f
+            ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_3 -> -3f
+            else -> 0f
+        }
+    }
+
+    private fun initAcDistribution() {
+        coroutineScope.launch {
+
+            hvacDistributionStateUseCase.rearLeftDistributionState.collect {
+                logDebug("collect change in rearConvenienceLockState ${it?.id}")
+                it?.let {
+                    rearLeftAcDistributionState.emit(it)
+                }
+            }
+        }
+    }
+
+    private fun initRearLockState() {
+        familySettingUsecase.rearLockState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                rearConvenienceLockState = this@collect.isSelected
+                logDebug("Rccd rearLockState: ${this@collect}")
+                }
+            }
+        }
+
+    /** This method will sync required CCF states info from backend */
+    private fun infoCCFState() {
+        viewModelScope.launch(default) {
+            withContext(mainDispatcher) {
+                climateCoolFitment = seatClimateInfo.getClimateInfoCCFRow1()?.isRow1CoolAvailable ?: false
+                minIntensityListValue = if (climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+                logDebug("climate cool fitment value $climateCoolFitment")
+            }
+        }
+    }
+
+    private fun initMaxDefrostState() {
+        coroutineScope.launch {
+            maxDefrostState.state.collect {
+                logDebug("collect change in maxDefrostState ${it?.isMaxDefrostOn}")
+                JeaLogger.info(message = "collect change in front left temp", module = "systembar", feature = "rccddrawer", fileName = "TopDrawerInflater")
+                it?.let {
+                    defrostButtonState.emit(it.isMaxDefrostOn)
+                }
+            }
+        }
+    }
+
+    private fun initRearLeftTemp() {
+        coroutineScope.launch {
+            hvacTempUseCase.rearLeftTempState.collect {
+                logDebug("collect change in front left temp")
+                it?.let {
+                    logDebug("RCCD : rearLeftTempState : ${it.temp}")
+                    rearRowLeftTemperature.emit(it.temp)
+                }
+            }
+        }
+    }
+
+    private fun initSyncState() {
+        coroutineScope.launch {
+            hvacDualUseCase.state.collect {
+                if (it != null) {
+                    hvacSyncState = it
+                    syncButtonState.emit(it.isSyncOn)
+                }
+            }
+        }
+    }
+
+    private fun initRearRightTemp() {
+        coroutineScope.launch {
+            hvacTempUseCase.rearRightTempState.collect {
+                logDebug("collect change in front right temp")
+                it?.let {
+                    logDebug("RCCD : rearRightTempState : ${it.temp}")
+                    rearRowRightTemperature.emit(it.temp)
+                }
+            }
+        }
+    }
+
+    private fun initFrontAutoState() {
+        coroutineScope.launch {
+            hvacAutoUseCase.frontHvacAutoState.collect {
+                it?.let {
+                    frontAutoButtonState.emit(it.autoOn)
+                }
+            }
+        }
+    }
+
+    fun setFaceVentSwitch() {
+        distributionStateHandler.switchFaceVent()
+    }
+
+    fun setFootVentSwitch() {
+        distributionStateHandler.switchFootVent()
+    }
+
+    /** toggle maxDefrost state */
+    fun toggleMaxDefrost() {
+        maxDefrostState.switchMaxDefrost()
+    }
+
+    /** @param value */
+    fun setRearLeftSeatTemperature(value: Float) {
+        temperatureStateHandler.setRearRowLeftTemperature(value, FCCD)
+    }
+
+    /** toggle sync button state */
+    fun toggleSyncButtonState() {
+        hvacDualUseCase.switchSync(hvacSyncState?.switch)
+    }
+
+    /** @param value */
+    fun setRearRightSeatTemperature(value: Float) {
+        temperatureStateHandler.setRearRowRightTemperature(value, FCCD)
+    }
+
+
+    /** toggle auto button state */
+    fun toggleFrontAutoButtonState() {
+        hvacAutoUseCase.switchFrontAuto()
+    }
+
+    /** TODO sets Glove box status */
+    fun updateGloveBoxStatus() {
+        // TODO  - logic should be replaced with state value from back end during BL integration
+    }
+
+    /** toggle max ac state */
+    fun toggleMaxACButtonState() {
+        hvacMaxAcUseCase.switchMaxAC()
+    }
+
+    /** toggle ac state */
+    fun toggleACButtonState() {
+        hvacACUseCase.switchAC()
+    }
+
+    private fun initHvacEfficientAuto() {
+        coroutineScope.launch {
+            efficientAutoState.efficientAutoMode.collect() {
+                hvacEfficientAutoMode.value = it
+
+                logDebug("EfficientAuto : ${hvacEfficientAutoMode.value?.isEnabled}")
+            }
+        }
+    }
+
+    fun setSeatTemperature(seatPosition: Int, intensityValue: Int) {
+        climateIntensity.setClimateIntensity(seatPosition, intensityValue)
+    }
+
+    /** selected seat position and vehicle seat area id mapping */
+    fun getSeatSelection(selectedSeatPosition: Int): Int {
+        return when (selectedSeatPosition) {
+            SeatPosition.SEAT_POSITION_DRIVER -> SeatSelection.SEAT_SELECTION_FIRST_ROW_LEFT
+            SeatPosition.SEAT_POSITION_PASSENGER -> SeatSelection.SEAT_SELECTION_FIRST_ROW_RIGHT
+            SeatPosition.SEAT_POSITION_REAR_LEFT -> SeatSelection.SEAT_SELECTION_SECOND_ROW_LEFT
+            SeatPosition.SEAT_POSITION_REAR_RIGHT -> SeatSelection.SEAT_SELECTION_SECOND_ROW_RIGHT
+            else -> 0
+        }
+    }
+
+    /** seat temperature value switcher to intensity level state mapping */
+    fun getSelectedSeatTemperature(temperatureIntensity: Float): Int {
+        return when (temperatureIntensity) {
+            0f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_OFF
+            1f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_1
+            -1f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_1
+            2f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_2
+            -2f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_2
+            3f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_3
+            -3f -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_3
+            else -> ClimateIntensity.SEAT_CLIMATE_INTENSITY_OFF
+        }
+    }
+
+    private fun onHeatedScreenChanged() {
+        feedbackMessage = true
+        viewModelScope.launch(default) {
+            delay(4000)
+            withContext(mainDispatcher) { feedbackMessage = false }
+        }
+    }
+
+    private fun lastInteractionLessThanTenSeconds(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val timeDifference = currentTime - lastInteractionTime
+        lastInteractionTime = currentTime
+        return timeDifference <= TIME_OUT
+    }
+
+    fun setRccdTempClimateLock(rearTempLockType: RccdTopDrawerInflater.RccdLockType) {
+        rccdHomeScreenLockType.value = rearTempLockType
+        if (rccdHomeScreenLockType.value != RccdTopDrawerInflater.RccdLockType.RCCD_NO_LOCK)
+            setRccdTempClimateLockTimer(true)
+        else
+            setRccdTempClimateLockTimer(false)
+    }
+
+    fun setRccdTempClimateLockTimer(rccdHomeScreenLockTimerValue: Boolean) {
+        rccdHomeScreenLockTimerStatus.value = rccdHomeScreenLockTimerValue
+    }
+
+    private fun collectTemperatureUnitType() {
+        tempState.temperatureUnitState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                isTemperatureCelcius = this@collect.isCelsius
+            }
+        }
+    }
+    companion object {
+        const val TIME_OUT = 10000
+        const val TIMEOUT_600_MIL_SECOND = 600L
+        const val TIMEOUT_400_MIL_SECOND = 400
+
+        const val ANIMATION_TIMEOUT_300_MIL_SECOND = 300
+
     }
 }
-
-Step 4: Handle Permissions (for Android 6.0 and above)
-
-If you are loading PDFs from external storage, make sure to request runtime permissions.
-
-private void checkPermissions() {
-    if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_CODE);
-    } else {
-        // Load your PDF here
-        loadPdf("path/to/your/pdf/file.pdf");
-    }
-}
-
-Step 5: Handling Form Fields
-
-If your PDF contains form fields, PDFTron will allow users to interact with them. When the PDF document is loaded, users can fill in forms, check boxes, etc.
-
-Example XML Layout for Activity
-
-Here’s a simple XML layout for the PdfViewerActivity:
-
-<?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
-    
-    <!-- PDFViewCtrl will be added programmatically in the activity -->
-</RelativeLayout>
-
-Step 6: Test Your Application
-
-Run your application on an Android device or emulator. Make sure the PDF file you are trying to load is accessible, and you have the necessary permissions to read it. You should be able to view the PDF and interact with any form fields it contains.
-
-Additional Features
-
-PDFTron offers a wide range of features, including:
-
-	•	Annotations
-	•	Redaction
-	•	Digital signatures
-	•	Form filling and saving
-	•	PDF creation and editing
-
-You can explore more features in the PDFTron documentation and incorporate them as needed.
-
-Conclusion
-
-Using PDFTron in your Android application allows for robust PDF handling capabilities, including the ability to display and fill out editable fields. Ensure you have the necessary permissions and follow best practices for user experience in handling PDF files.
