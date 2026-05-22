@@ -1,188 +1,1870 @@
-kimport android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+package com.jlr.jea.systembar.fccd.drawer
+
+import android.content.Context
+import android.util.Log
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.sp
-import androidx.window.layout.WindowMetricsCalculator
-import androidx.window.layout.WindowSizeClass
-import androidx.window.layout.WindowWidthSizeClass
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MAX_VALUE_FAHRENHEIT
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MAX_VALUE_FAHRENHEIT_PASSENGER
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MAX_VALUE_PASSENGER
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MIN_VALUE
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MIN_VALUE_FAHRENHEIT
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MIN_VALUE_FAHRENHEIT_PASSENGER
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_MIN_VALUE_PASSENGER
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler.Companion.TEMPERATURE_UNIT
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_DRIVER
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_PASSENGER
+import com.jlr.jea.core.collectDragEvent
+import com.jlr.jea.core.detectGestureEvent
+import com.jlr.jea.core.get
+import com.jlr.jea.core.inflater.ThemedComposeInflater
+import com.jlr.jea.core.logger.JeaLogger
+import com.jlr.jea.resources.R
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_INCREMENT
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_MIN_VALUE_ZONE_DUAL
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+import com.jlr.jea.seats.ui.viewmodels.SeatsTemperatureViewModel.Companion.TEMPERATURE_OFF_VALUE
+import com.jlr.jea.systembar.api.interactor.IFccdTopDrawerInteractor
+import com.jlr.jea.systembar.api.interactor.ILauncherInteractor
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.ANIMATION_TIMEOUT_300_MIL_SECOND
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.GLOVEBOX_OFF
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.GLOVEBOX_TOAST_TIMEOUT
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.TEMPERATURE_MAX_VALUE
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.TIMEOUT_400_MIL_SECOND
+import com.jlr.jea.systembar.fccd.drawer.FccdTopDrawerViewModel.Companion.TIMEOUT_600_MIL_SECOND
+import com.jlr.jea.systembar.fccd.interactor.FccdBottomBarInteractor
+import com.jlr.jea.systembar.fccd.interactor.FccdTopBarInteractor
+import com.jlr.jea.systembar.fccd.launcher.IActivityLauncher
+import com.jlr.jea.systembar.fccd.ui.JeaAwayModePopUp
+import com.jlr.jea.systembar.fccd.ui.JeaGloveBoxPopUp
+import com.jlr.jea.ui.components.CircularBtnInteractionMode
+import com.jlr.jea.ui.components.ClimateBtnStates
+import com.jlr.jea.ui.components.JeaAcTemp
+import com.jlr.jea.ui.components.JeaAcTempState
+import com.jlr.jea.ui.components.JeaCircularButton
+import com.jlr.jea.ui.components.JeaCircularButtonState
+import com.jlr.jea.ui.components.JeaCircularButtonStyle
+import com.jlr.jea.ui.components.JeaClimateBtn
+import com.jlr.jea.ui.components.JeaClimateBtnState
+import com.jlr.jea.ui.components.JeaClimateBtnVariant
+import com.jlr.jea.ui.components.JeaSeatTemp
+import com.jlr.jea.ui.components.JeaSeatTempState
+import com.jlr.jea.ui.components.basecomponents.ValueType
+import com.jlr.jea.ui.theme.JLRTheme
+import com.jlr.jea.ui.theme.JeaCommonTheme
+import com.jlr.jea.ui.theme.JeaTheme
+import com.jlr.systembar.core.api.coroutines.CoroutineDispatchers
+import com.jlr.systembar.core.api.coroutines.Dispatcher
+import com.jlr.systembar.core.api.coroutines.Dispatcher.DEFAULT
+import com.jlr.systembar.core.api.coroutines.ISequentialCoroutine
+import com.jlr.systembar.core.api.events.DragState
+import com.jlr.systembar.core.api.extension.collect
+import com.jlr.systembar.core.api.extension.dimension
+import com.jlr.systembar.core.api.extension.logDebug
+import com.jlr.systembar.core.api.system.IWindowComposeView
+import com.jlr.systembar.core.api.system.isLHD
+import com.jlr.systembar.core.api.system.isRHD
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.ClimateAway
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.HeatSteeringWheel
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.HeatedDoorMirrors
+import com.jlr.systembar.vehiclecontrols.api.offroad.drivemodes.ILowPowerModeUseCase
+import com.jlr.systembar.vehiclecontrols.api.quickcontrol.IDetoxModeUseCase
+import com.jlr.systembar.vehiclecontrols.data.VehicleControlConstants.OFF
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.EfficientAutoMode
+import com.jlr.ui.Padding
+import com.jlr.ui.jea.components.shadow.basecomponents.JeaDoubleInnerShadowData
+import com.jlr.ui.jea.components.shadow.basecomponents.JeaInnerShadowData
+import com.jlr.ui.library.component.ImageComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.celsiusToFahrenheit
+import kotlin.math.abs
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState
-)
 
-        // Get the current window metrics to calculate size class
-        val windowMetrics = WindowMetricsCalculator.getOrCreate()
-            .computeCurrentWindowMetrics(this)
-        val windowSizeClass = WindowSizeClass.calculateFromSize(
-            width = windowMetrics.bounds.width(),
-            height = windowMetrics.bounds.height()
-        )
+private const val FADE_IN_ANIMATION_DURATION = 400
+private const val BUBBLE_ANIMATION_DURATION = 600
+private const val COERCE_MIN = 0f
+private const val COERCE_MAX = 1f
 
-        setContent {
-            ResponsiveText(windowSizeClass)
+/**
+ * @param scope - coroutine scope
+ * @param dispatcher - dispatcher for coroutine
+ * @property drawerEvent - reference to TopDrawerState class
+ * @property viewModelFactory - to provide the Top drawer view model
+ * @property activityLauncher - to launch activity specified by the class
+ *    type
+ * @property fccdBottomBarInteractor - interface to interact with bottombar
+ * @property context - context
+ */
+class FccdTopDrawerInflater @Inject constructor(
+    @CoroutineDispatchers(Dispatcher.MAIN) private val mainDispatcher: CoroutineDispatcher,
+    @CoroutineDispatchers(DEFAULT) private val default: CoroutineDispatcher,
+    private val drawerEvent: FccdTopDrawerState,
+    private val viewModelFactory: ViewModelProvider.Factory,
+    private val activityLauncher: IActivityLauncher,
+    private val scope: ISequentialCoroutine,
+    @CoroutineDispatchers(Dispatcher.DEFAULT) dispatcher: CoroutineDispatcher,
+    private val fccdBottomBarInteractor: FccdBottomBarInteractor,
+    private val topDrawerInteractor: IFccdTopDrawerInteractor,
+    @ApplicationContext private val context: Context,
+    private val launcherInteractor: ILauncherInteractor,
+    private val detoxModeUseCase: IDetoxModeUseCase,
+    @CoroutineDispatchers(Dispatcher.MAIN) private val main: CoroutineDispatcher,
+    private val awayModePopup: JeaAwayModePopUp,
+    private val gloveBoxPopup: JeaGloveBoxPopUp,
+    private val topBarInteractor: FccdTopBarInteractor,
+    private val lowPowerModeUseCase: ILowPowerModeUseCase,
+
+    ) : ThemedComposeInflater() {
+    private val isDrawerOpening = MutableStateFlow(value = true)
+    private val isDrawerFullClosed = MutableStateFlow(value = false)
+    private val isDrawerFullOpened = MutableStateFlow(value = true)
+    private var isDetoxModeEnabled by mutableStateOf(false)
+    var lowPowerModeEnabled by mutableStateOf(false)
+    private var swipeStartY: Float? = null
+    private var swipeStartTimeMs: Long? = null
+    private var lastY: Float? = null
+    private val quickTimeWindowMs = 180L
+    private val minDistancePx = 60f
+    private val minSpeedPxPerMs = 0.8f
+
+    private val minTempInCelsius = 15.5f
+    private val maxTempInCelsius = 28.5f
+    private val minTempInFahrenheit= 58
+    private val maxTempInFahrenheit = 84
+
+    init {
+        drawerEvent.gestureEvent.collectDragEvent(
+            coroutineScope = scope,
+            dispatcher = dispatcher
+        ) {
+            when (this) {
+
+                is DragState.DRAG_STARTED -> {
+                    // Mark swipe start (time only; position captured on first DRAGGING)
+                    swipeStartTimeMs = System.currentTimeMillis()
+                    swipeStartY = null
+                    lastY = null
+                }
+
+                is DragState.DRAGGING -> {
+                    logDebug("onclose val ${(this.actualValue * -1).toInt()}")
+                    if (swipeStartY == null) swipeStartY = this.actualValue
+                    lastY = this.actualValue
+
+                    if (isDetoxModeEnabled) detoxModeUseCase.setDetoxModeValue(OFF)
+
+                    if (this.actualValue * -1 >
+                        context.dimension(R.integer.fccd_top_drawer_y) * 1 / 4
+                    ) {
+                        // drawer is getting closed
+                        isDrawerOpening.emit(false)
+                    } else {
+                        // drawer is getting opened
+                        isDrawerOpening.emit(true)
+                    }
+
+                    if ((this.actualValue * -1).toInt() ==
+                        context.dimension(R.integer.fccd_top_drawer_y)
+                    ) {
+                        // fully closed
+                        topDrawerInteractor.setDrawerHiddenState(true)
+                        topDrawerInteractor.setHideDrawerFlag(true)
+                        topDrawerInteractor.setDrawerOpenState(false)
+                        topDrawerInteractor.setOpenDrawerFlag(false)
+                        launcherInteractor.setAirFlowScreenVisible(true)
+                        isDrawerFullClosed.emit(true)
+                    } else {
+                        isDrawerFullClosed.emit(false)
+                    }
+
+                    if(isDrawerFullClosed.value){
+                        launcherInteractor.setNavigationStatus(false)
+                    }
+
+                    if ((this.actualValue * -1).toInt() == 0) {
+                        // fully opened
+                        logDebug("drawer fully opened")
+
+                        isDrawerFullOpened.emit(true)
+                        topDrawerInteractor.setDrawerHiddenState(false)
+                        topDrawerInteractor.setHideDrawerFlag(false)
+                        topDrawerInteractor.setDrawerOpenState(true)
+                        topDrawerInteractor.setOpenDrawerFlag(true)
+
+                        fccdBottomBarInteractor.updateBottomBarBackground(false)
+
+                        launcherInteractor.setIsTempPageScreen(false)
+                        launcherInteractor.setIsDistributionPageScreen(false)
+                        launcherInteractor.setShouldOpenDistributionScreen(false)
+                        launcherInteractor.setShouldOpenTempScreen(false)
+                        launcherInteractor.setShouldOpenSeatsScreen(false)
+                        launcherInteractor.setShouldOpenAirflowScreen(false)
+                        if(!launcherInteractor.isNavigating.value){
+                            launcherInteractor.setShouldOpenHomeListScreen(true)
+                            launcherInteractor.setIsSeatsPageScreen(false)
+                            launcherInteractor.setAirFlowClickState(true)
+                            launcherInteractor.setAirFlowScreenVisible(false)
+                        }
+                        logDebug("setShouldOpenHomeListScreen is set true ion fully close")
+                    } else {
+                        isDrawerFullOpened.emit(false)
+                        fccdBottomBarInteractor.updateBottomBarBackground(true)
+                    }
+                }
+
+                is DragState.DRAG_END -> {
+                    val swipeY = swipeStartY
+                    val endY = lastY
+                    val swipeTime = swipeStartTimeMs
+
+                    if (swipeY != null && endY != null && swipeTime != null) {
+                        val finalYVal = endY - swipeY
+                        val timeVal = (System.currentTimeMillis() - swipeTime).coerceAtLeast(1)
+                        val speed = kotlin.math.abs(finalYVal) / timeVal
+
+                        val isFast = speed > minSpeedPxPerMs || timeVal <= quickTimeWindowMs
+                        val movedEnough = kotlin.math.abs(finalYVal) > minDistancePx
+
+                        if (isFast && movedEnough) {
+                            if (finalYVal < 0f) {
+                                drawerEvent.closeDrawer()
+                            } else {
+                                drawerEvent.openDrawer()
+                            }
+                        }
+                    }
+
+                    swipeStartTimeMs = null
+                    swipeStartY = null
+                    lastY = null
+                }
+
+                else -> Unit
+            }
+        }
+        detoxModeUseCase.detoxMode.collect(scope, dispatcher) {
+            withContext(main) {
+                isDetoxModeEnabled = this@collect.isDetoxTurnedOn
+                JeaLogger.debug("Detox mode received$isDetoxModeEnabled inside Top drawer inflater ", "Detox Mode")
+                if (isDetoxModeEnabled && !drawerEvent.isDrawerOpened.value) {
+                    drawerEvent.toggleDrawer()
+                }
+            }
+        }
+        scope.launch(dispatcher) {
+            isDetoxModeEnabled = detoxModeUseCase.getDetoxModeValue()?.isDetoxTurnedOn ?: false
+            JeaLogger.debug("Detox mode set to $isDetoxModeEnabled" + "inside Top drawer inflater", "Detox Mode")
+        }
+
+        lowPowerModeUseCase.lowPowerModeState.collect(
+            coroutineScope = scope, dispatcher = default
+        ) {
+            withContext(mainDispatcher) { lowPowerModeEnabled = this@collect.isLPMEnable }
         }
     }
-}
 
-@Composable
-fun ResponsiveText(windowSizeClass: WindowSizeClass) {
-    val fontSize = when (windowSizeClass.widthSizeClass) {
-        WindowWidthSizeClass.Compact -> 16.sp  // Small text for phones
-        WindowWidthSizeClass.Medium -> 20.sp   // Medium text for small tablets
-        WindowWidthSizeClass.Expanded -> 24.sp // Large text for large tablets/desktops
-        else -> 16.sp                          // Default text size
+    @Composable
+    override fun Content(view: IWindowComposeView) {
+        TopDrawerScreen()
+
+        val shouldHide by topDrawerInteractor.shouldHideDrawer.collectAsState()
+        val shouldOpen by topDrawerInteractor.shouldOpenDrawer.collectAsState()
+        val isFullyOpened by isDrawerFullOpened.collectAsState()
+        val isFullyClosed by isDrawerFullClosed.collectAsState()
+        val isAnimating = !(isFullyOpened || isFullyClosed)
+        val shouldOpenDrawer by topDrawerInteractor.shouldCloseDrawer.collectAsState()
+
+
+        LaunchedEffect(shouldHide, isFullyOpened, isAnimating) {
+            if (!isAnimating && shouldHide && isFullyOpened) {
+                drawerEvent.closeDrawer()
+            }
+        }
+        LaunchedEffect(shouldOpen, isFullyClosed, isAnimating) {
+            if (!isAnimating && shouldOpen && isFullyClosed) {
+                drawerEvent.openDrawer()
+            }
+        }
+
+        LaunchedEffect(shouldOpenDrawer) {
+            if (shouldOpenDrawer) {
+                JeaLogger.debug("closing drawer after 30 Secs", "FCCDTopDrawerInflater")
+
+                drawerEvent.openDrawer()
+                topDrawerInteractor.setCloseDrawer(false)
+            }
+        }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Responsive Text Example",
-            style = TextStyle(
-                fontSize = fontSize,
-                color = MaterialTheme.colorScheme.onBackground
+    @Composable
+    private fun TopDrawerScreen() {
+        TopDrawerGroup()
+    }
+
+    @Composable
+    private fun TopDrawerGroup() {
+        val fccdTopDrawerViewModel: FccdTopDrawerViewModel = viewModelFactory.get()
+        val efficientAutoMode by fccdTopDrawerViewModel.hvacEfficientAutoMode.collectAsState()
+        var showContent by remember { mutableStateOf(true) }
+
+        var showBubble by remember { mutableStateOf(false) }
+        val targetAlpha = if (showContent) COERCE_MAX else COERCE_MIN
+        val animatedAlpha by animateFloatAsState(targetValue = targetAlpha, animationSpec = tween(TIMEOUT_400_MIL_SECOND))
+        var temperatureValue by remember { mutableFloatStateOf(0f) }
+        var isLeftSliderOpen by remember { mutableStateOf(false) }
+        var isRightSliderOpen by remember { mutableStateOf(false) }
+        var activeDragSide by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(showContent, activeDragSide) {
+            if (showContent && activeDragSide != null) {
+                delay((BUBBLE_ANIMATION_DURATION + FADE_IN_ANIMATION_DURATION).toLong())
+                activeDragSide = null
+            }
+        }
+
+        LaunchedEffect(fccdTopDrawerViewModel.isValetModeActivated) {
+            if (fccdTopDrawerViewModel.isValetModeActivated && !topDrawerInteractor.isDrawerOpen.value) {
+                topDrawerInteractor.setOpenDrawerFlag(true)
+            }
+        }
+        val gestureModifier =
+            if (!fccdTopDrawerViewModel.isValetModeActivated) {
+                Modifier.detectGestureEvent(drawerEvent.gestureEvent)
+            } else {
+                Modifier
+            }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(gestureModifier)
+        ) {
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                // Set Drawer Background
+                if (isDrawerFullClosed.collectAsState().value) {
+                    ImageComponent(
+                        id = if (isDetoxModeEnabled) R.drawable.fccd_drawer_header_dark else JeaCommonTheme.configProvider.jeaFccdTopHeaderDrawerBgImage,
+                        contentDescription = stringResource(id = R.string.jea_content_description_fccd_drawer_bg),
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier
+                            .wrapContentSize()
+                            .align(Alignment.BottomStart)
+                    )
+                } else {
+                    ImageComponent(
+                        id = if (isDetoxModeEnabled) R.drawable.fccd_drawer_bg_dark else JeaCommonTheme.configProvider.jeaFccdDrawerBgImage,
+                        contentDescription = stringResource(id = R.string.jea_content_description_fccd_drawer_bg),
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Set Drawer Shadow
+                if (isDrawerFullOpened.collectAsState().value || isDrawerFullClosed.collectAsState().value) {
+                    Box(
+                        modifier = Modifier
+                            .height(dimensionResource(R.dimen.fccd_top_drawer_height))
+                            .width(dimensionResource(R.dimen.fccd_top_drawer_width))
+                    ) {
+                        ImageComponent(
+                            id = if (isDetoxModeEnabled) R.drawable.fccd_drawer_shadow_dark else JeaCommonTheme.configProvider.jeaFccdDrawerBgShadowImage,
+                            contentDescription = stringResource(id = R.string.jea_content_description_fccd_drawer_bg),
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .offset(
+                            y = dimensionResource(R.dimen.fccd_top_drawer_seats_climate_padding)
+                        )
+                        .width(dimensionResource(R.dimen.fccd_top_drawer_width))
+                ) {
+                    if (isDrawerOpening.collectAsState().value) {
+                        JLRTheme {
+                            if (context.isLHD()) {
+                                LeftColumnGroup(
+                                    fccdTopDrawerViewModel,
+                                    showContent = showContent,
+                                    showBubble = showBubble,
+                                    onJeaACTempDragStart = {
+                                        activeDragSide = "left"
+                                        showContent = false
+                                        isLeftSliderOpen = true
+                                        showBubble = true
+                                    },
+                                    onJeaACTempDragEnd = {
+                                        scope.launch {
+                                            showContent = true
+                                            delay((BUBBLE_ANIMATION_DURATION + FADE_IN_ANIMATION_DURATION).toLong())
+                                            isLeftSliderOpen = false
+                                            showBubble = false
+                                            activeDragSide = null
+                                        }
+
+                                    },
+                                    tempValue = temperatureValue,
+                                    onTemperatureChange = { temperatureValue = it },
+                                    isLeftOpen = isLeftSliderOpen,
+                                    activeDragSide = activeDragSide,
+                                )
+                                MiddleColumnGroup(fccdTopDrawerViewModel, efficientAutoMode, showContent = showContent, showBubble = showBubble, tempValue = temperatureValue)
+                                RightColumnGroup(
+                                    fccdTopDrawerViewModel, showContent = showContent, showBubble = showBubble,
+                                    onJeaACTempDragStart = {
+                                        activeDragSide = "right"
+                                        showContent = false
+                                        isRightSliderOpen = true
+                                        showBubble = true
+                                    },
+                                    onJeaACTempDragEnd = {
+                                        scope.launch {
+                                            showContent = true
+                                            delay((BUBBLE_ANIMATION_DURATION + FADE_IN_ANIMATION_DURATION).toLong())
+                                            isRightSliderOpen = false
+                                            showBubble = false
+                                            activeDragSide = null
+                                        }
+
+                                    },
+                                    tempValue = temperatureValue,
+                                    onTemperatureChange = { temperatureValue = it },
+                                    isRightOpen = isRightSliderOpen,
+                                    activeDragSide = activeDragSide,
+                                )
+                            } else {
+                                RightColumnGroup(
+                                    fccdTopDrawerViewModel, showContent = showContent, showBubble = showBubble,
+                                    onJeaACTempDragStart = {
+                                        activeDragSide = "right"
+                                        showContent = false
+                                        isRightSliderOpen = true
+                                        showBubble = true
+                                    },
+                                    onJeaACTempDragEnd = {
+                                        scope.launch {
+                                            showContent = true
+                                            delay((BUBBLE_ANIMATION_DURATION + FADE_IN_ANIMATION_DURATION).toLong())
+                                            isRightSliderOpen = false
+                                            showBubble = false
+                                            activeDragSide = null
+                                        }
+
+                                    },
+                                    tempValue = temperatureValue,
+                                    onTemperatureChange = { temperatureValue = it },
+                                    isRightOpen = isRightSliderOpen,
+                                    activeDragSide = activeDragSide,
+                                )
+                                MiddleColumnGroup(fccdTopDrawerViewModel, efficientAutoMode, showContent = showContent, showBubble = showBubble, tempValue = temperatureValue)
+                                LeftColumnGroup(
+                                    fccdTopDrawerViewModel,
+                                    showContent = showContent,
+                                    showBubble = showBubble,
+                                    onJeaACTempDragStart = {
+                                        activeDragSide = "left"
+                                        showContent = false
+                                        isLeftSliderOpen = true
+                                        showBubble = true
+                                    },
+                                    onJeaACTempDragEnd = {
+                                        scope.launch {
+                                            showContent = true
+                                            delay((BUBBLE_ANIMATION_DURATION + FADE_IN_ANIMATION_DURATION).toLong())
+                                            isLeftSliderOpen = false
+                                            showBubble = false
+                                            activeDragSide = null
+                                        }
+
+                                    },
+                                    tempValue = temperatureValue,
+                                    onTemperatureChange = { temperatureValue = it },
+                                    isLeftOpen = isLeftSliderOpen,
+                                    activeDragSide = activeDragSide,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Set Drawer dragging markers
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(y = dimensionResource(R.dimen.fccd_drawer_marker_y_offset))
+
+                ) {
+                    Image(
+                        painter = if (isDetoxModeEnabled) painterResource(R.drawable.fccd_drawer_marker_dark) else painterResource(JeaCommonTheme.configProvider.jeaFccdDrawerBgBottomMarkingImage),
+                        contentDescription = stringResource(R.string.jea_content_description_fccd_drawer),
+                    )
+                }
+
+                // Enable Shadow from Top Bar or TopDrawer
+                if (!isDrawerFullClosed.collectAsState().value && !isDrawerFullOpened.collectAsState().value) {
+                    topBarInteractor.setDrawerOpenState(false)
+                } else {
+                    topBarInteractor.setDrawerOpenState(true)
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun LeftColumnGroup(
+        fccdTopDrawerViewModel: FccdTopDrawerViewModel,
+        showContent: Boolean,
+        showBubble: Boolean,
+        onJeaACTempDragStart: () -> Unit,
+        onJeaACTempDragEnd: () -> Unit,
+        onTemperatureChange: (Float) -> Unit,
+        tempValue: Float,
+        isLeftOpen: Boolean,
+        activeDragSide: String?
+    ) {
+        val leftClimateCurrentValue =
+            when (context.isLHD()) {
+                true -> fccdTopDrawerViewModel.frontRowLeftTemperature.collectAsState()
+                false -> fccdTopDrawerViewModel.frontRowRightTemperature.collectAsState()
+            }
+
+        val climateFrontRowPowerButtonState = fccdTopDrawerViewModel.climateFrontRowPowerButtonState.collectAsState().value
+        val decrementDriverButtonState = remember { mutableStateOf(com.jlr.ui.State(enabled = true)) }
+        val incrementDriverButtonState = remember { mutableStateOf(com.jlr.ui.State(enabled = true)) }
+        val bubbleHeight = dimensionResource(R.dimen.fccd_top_drawer_inflater_bubble_height)
+        val bubbleWidth = dimensionResource(R.dimen.fccd_top_drawer_inflater_bubble_width)
+        val bubbleTargetHeight = dimensionResource(R.dimen.fccd_top_drawer_inflater_bubble_trgt_height)
+        val isTemperatureCelsius: Boolean = fccdTopDrawerViewModel.temperatureStateHandler.isTemperatureCelcius.collectAsState().value
+
+Log.e("Mukesh compose",""+leftClimateCurrentValue)
+        LaunchedEffect(key1 = leftClimateCurrentValue) {
+            JeaLogger.debug("LeftColumnGroup called leftClimateCurrentValue :$leftClimateCurrentValue ")
+        }
+
+        Column(
+            modifier = Modifier
+                .height(dimensionResource(R.dimen.fccd_drawer_left_column_height))
+                .width(dimensionResource(R.dimen.fccd_drawer_left_column_width)),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            val decrementButtonStateDriver = if (leftClimateCurrentValue.value <= TemperatureStateHandler.TEMPERATURE_MIN_VALUE) {
+                com.jlr.ui.State(enabled = false)
+            } else {
+                com.jlr.ui.State(enabled = true)
+            }
+            val incrementButtonStateDriver = if (leftClimateCurrentValue.value >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE) {
+                com.jlr.ui.State(enabled = false)
+            } else {
+                com.jlr.ui.State(enabled = true)
+            }
+            if (showBubble) {
+                if (isLeftOpen) {
+                    var expanded by remember { mutableStateOf(false) }
+                    var visible by remember { mutableStateOf(true) }
+
+                    // Animate height from bubble to slider and back
+                    val animatedHeight by animateDpAsState(
+                        targetValue = if (expanded) bubbleTargetHeight else bubbleHeight,
+                        animationSpec = tween(durationMillis = BUBBLE_ANIMATION_DURATION, easing = FastOutSlowInEasing)
+                    )
+
+                    // Animate alpha for fade in/out
+                    val animatedAlpha by animateFloatAsState(
+                        targetValue = if (visible) COERCE_MAX else COERCE_MIN,
+                        animationSpec = tween(durationMillis = FADE_IN_ANIMATION_DURATION)
+                    )
+
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(bubbleWidth)
+                                .height(animatedHeight)
+                                .offset(y = dimensionResource(R.dimen.fccd_slider_yoffset))
+                                .alpha(animatedAlpha)
+                                .clip(RoundedCornerShape(dimensionResource(R.dimen.fccd_slider_corner_radius)))
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.jea_climate_slider),
+                                contentDescription = stringResource(R.string.jea_content_description_fccd_drawer),
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    // Start expansion when bubble appears
+                    LaunchedEffect(Unit) {
+                        expanded = true
+                    }
+
+                    // Reverse when drag ends
+                    LaunchedEffect(showContent) {
+                        if (showContent) {
+                            expanded = false // Shrink back
+                            delay(TIMEOUT_600_MIL_SECOND)       // Wait for shrink animation
+                            visible = false  // Fade out
+                        }
+                    }
+                }
+
+            }
+            Box {
+
+                val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = true, isRightColumn = false)
+                val dragOffset by animateDpAsState(
+                    if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                )
+                Box(
+                    modifier = Modifier
+                        .alpha(dragAlpha)
+                        .offset(y = dragOffset)
+                        .blockParentDragWhilePressed(enabled = showBubble && isLeftOpen)
+                ) {
+                    val isColumnReversed = !context.isLHD()
+                    JeaAcTemp(
+                        jeaAcTempsConfig = JeaTheme.configProvider.jeaAcTempsConfig.copy(
+                            minValue = if (isTemperatureCelsius) TEMPERATURE_MIN_VALUE else TEMPERATURE_MIN_VALUE_FAHRENHEIT,
+                            maxValue = if (isTemperatureCelsius) TemperatureStateHandler.Companion.TEMPERATURE_MAX_VALUE else TEMPERATURE_MAX_VALUE_FAHRENHEIT,
+                            stepValue = TemperatureStateHandler.TEMPERATURE_STEP_VALUE,
+                            minValueTextString = stringResource(if (isTemperatureCelsius) R.string.jea_climate_option_temp_low_celcius_passenger else R.string.jea_climate_option_temp_low_fahrenheit_passenger),
+                            maxValueTextString = stringResource(if (isTemperatureCelsius) R.string.jea_climate_option_temp_hi_celcius_passenger else R.string.jea_climate_option_temp_hi_fahrenheit_passenger),
+                            offTextString = if (climateFrontRowPowerButtonState) null else stringResource(R.string.jea_climate_option_temp_off),
+                        ),
+                        jeaAcTempState = JeaAcTempState(
+                            shouldShowFloat = isTemperatureCelsius,
+                            isEnable = !lowPowerModeEnabled,
+                            decrementButtonState = decrementButtonStateDriver,
+                            incrementButtonState = incrementButtonStateDriver,
+                            onDecrementBtnClick = { value: Float, valueType: ValueType ->
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                fccdTopDrawerViewModel.isDriverTemperatureSelected = true
+                                JeaLogger.info(message = "will decrement front left temp, current temp is ${leftClimateCurrentValue.value}", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                val nextValue = leftClimateCurrentValue.value - TemperatureStateHandler.TEMPERATURE_STEP_VALUE
+                                if (nextValue >= TEMPERATURE_MIN_VALUE) {
+                                    if (!isColumnReversed) {
+                                        fccdTopDrawerViewModel.setFrontLeftSeatTemperature(nextValue)
+                                    } else {
+                                        fccdTopDrawerViewModel.setFrontRightSeatTemperature(nextValue)
+                                    }
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+
+                            },
+                            buttonClick = {
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                fccdTopDrawerViewModel.isDriverTemperatureSelected = true
+                                if (!topDrawerInteractor.isDrawerHidden.value) {
+                                    topDrawerInteractor.setHideDrawerFlag(true)
+                                }
+                                if (!launcherInteractor.isTempPageScreen.value) {
+                                    launcherInteractor.setShouldOpenTempScreen(true)
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+
+                            },
+                            onIncrementBtnClick = { value: Float, valueType: ValueType ->
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                fccdTopDrawerViewModel.isDriverTemperatureSelected = true
+                                JeaLogger.info(message = "will increment front left temp, current temp is ${leftClimateCurrentValue.value}", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                val nextValue = leftClimateCurrentValue.value + TemperatureStateHandler.TEMPERATURE_STEP_VALUE
+                                if (nextValue <= TemperatureStateHandler.TEMPERATURE_MAX_VALUE) {
+                                    if (!isColumnReversed) {
+                                        fccdTopDrawerViewModel.setFrontLeftSeatTemperature(nextValue)
+                                    } else {
+                                        fccdTopDrawerViewModel.setFrontRightSeatTemperature(nextValue)
+                                    }
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+
+                            },
+                            darkMode = false,
+                            valueBottomTextBoxState = if (fccdTopDrawerViewModel.isTemperatureCelcius == true) {
+                                Log.e("Mukesh",leftClimateCurrentValue.value.toString())
+                                leftClimateCurrentValue.value
+                            } else {
+                                val currentCelsius = leftClimateCurrentValue.value
+                                if (currentCelsius <= minTempInCelsius) {
+                                    Log.e("Mukesh1", minTempInFahrenheit.toFloat().toString())
+                                    minTempInFahrenheit.toFloat()
+                                }
+                                else if (currentCelsius >= maxTempInCelsius){
+                                    Log.e("Mukesh2", maxTempInFahrenheit.toFloat().toString())
+                                    maxTempInFahrenheit.toFloat()
+                                }
+                                else {
+                                    Log.e("Mukesh3", currentCelsius.toString())
+                                    celsiusToFahrenheit(currentCelsius)
+                                }
+                            },
+                            isDetoxModeActive = isDetoxModeEnabled,
+                            dragEventAllowed = true,
+                            onDragStart =
+                                {
+                                    fccdTopDrawerViewModel.isDriverTemperatureSelected = true
+                                    fccdTopDrawerViewModel.isDrawerSlidable = false
+                                    onJeaACTempDragStart() // triggers fade-out in parent
+                                },
+
+                            onDragEnd = {
+                                val setTempVal = when {
+                                    tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE -> TemperatureStateHandler.TEMPERATURE_MAX_VALUE
+                                    tempValue <= TEMPERATURE_MIN_VALUE -> TEMPERATURE_MIN_VALUE
+                                    else -> tempValue
+                                }
+                                if (!isColumnReversed) {
+                                    fccdTopDrawerViewModel.setFrontLeftSeatTemperature(setTempVal)
+                                } else {
+                                    fccdTopDrawerViewModel.setFrontRightSeatTemperature(setTempVal)
+                                }
+                                onJeaACTempDragEnd()
+                                JeaLogger.info("TempProgressVal= $tempValue", tag = "FCCDDragVal")
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+
+                            },
+
+                            onDragInProgress = { progressVal ->
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                onTemperatureChange(leftClimateCurrentValue.value + (progressVal.toFloat() / 2))
+                                JeaLogger.info("DragVal= $progressVal", tag = "FCCDDragVal")
+                            }
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+            val steeringWheelStatus: State<Int> =
+                fccdTopDrawerViewModel.steeringWheelHeatLevel.collectAsState()
+            if (!isDetoxModeEnabled) {
+
+
+                Box {
+                    val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = true, isRightColumn = false)
+                    val dragOffset by animateDpAsState(
+                        if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaCircularButton(
+                            JeaCircularButtonState(
+                                iconResId = when (steeringWheelStatus.value) {
+                                    HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_OFF -> if (isSystemInDarkTheme()) R.drawable.jea_heated_steering_wheel_dark else R.drawable.jea_heated_steering_wheel
+                                    HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_1 -> if (isSystemInDarkTheme()) R.drawable.jea_heated_steering_wheel_lvl1_dark else R.drawable.jea_heated_steering_wheel_lvl1
+                                    HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_2 -> if (isSystemInDarkTheme()) R.drawable.jea_heated_steering_wheel_lvl2_dark else R.drawable.jea_heated_steering_wheel_lvl2
+                                    else -> {
+                                        if (isSystemInDarkTheme()) R.drawable.jea_heated_steering_wheel_dark else R.drawable.jea_heated_steering_wheel
+                                    }
+                                },
+                                mode = com.jlr.ui.State(enabled = !fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport, selected = (steeringWheelStatus.value == HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_1 || steeringWheelStatus.value == HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_2)),
+                                showBg = false,
+                                onClick = {
+                                    if (!fccdTopDrawerViewModel.isModeTransport) {
+
+                                        fccdTopDrawerViewModel.updateSteeringWheelLevel(steeringWheelStatus.value)
+
+                                    }
+                                },
+                                interactionMode = CircularBtnInteractionMode.DEFERRED_CLICK
+                            ),
+                            jeaCircularButtonConfig = JeaTheme.configProvider.jeaCircularButtonConfig.copy(
+                                jeaCircularButtonStyle = JeaCircularButtonStyle.LIGHT,
+                                lightIconButtonColor = null)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+
+                Box {
+                    val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = true, isRightColumn = false)
+                    val driverSeatTemperature = if (context.isLHD()) fccdTopDrawerViewModel.driverSeatTemperature else fccdTopDrawerViewModel.passengerSeatTemperature
+                    val dragOffset by animateDpAsState(
+                        if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaSeatTemp(
+                            JeaTheme.configProvider.jeaSeatTempConfig.copy(
+                                minValue = fccdTopDrawerViewModel.minIntensityListValue,
+                                maxValue = TEMPERATURE_MAX_VALUE
+                            ),
+                            JeaSeatTempState(
+                                isEnable = !fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport,
+                                decrementButtonState = if (fccdTopDrawerViewModel.isModeTransport) com.jlr.ui.State(enabled = false) else decrementDriverButtonState.value,
+                                incrementButtonState = if (fccdTopDrawerViewModel.isModeTransport) com.jlr.ui.State(enabled = false) else incrementDriverButtonState.value,
+                                onDecrementBtnClick = { value: Float, valueType: ValueType ->
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val latestCurrent = if (context.isLHD()) fccdTopDrawerViewModel.driverSeatTemperature else fccdTopDrawerViewModel.passengerSeatTemperature
+                                        when (valueType) {
+                                            ValueType.NUMBER,
+                                            ValueType.NUMBER_WITH_MIN_MAX_TEXT
+                                                -> {
+                                                decrementDriverButtonState.value = if (driverSeatTemperature == fccdTopDrawerViewModel.minIntensityListValue) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+                                                incrementDriverButtonState.value = if (driverSeatTemperature == TEMPERATURE_MAX_VALUE) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+
+                                                val next = when {
+                                                    // Special Case: If the seat is currently OFF, first down press goes to -3 (Max Cool)
+                                                    latestCurrent == TEMPERATURE_OFF_VALUE -> {
+                                                        if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL
+                                                        else TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+                                                    }
+                                                    // Standard Case: Just decrement by 1 and let coerceIn handle the boundaries
+                                                    else -> latestCurrent - TEMPERATURE_INCREMENT
+                                                }.coerceIn(
+                                                    if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE,
+                                                    Companion.TEMPERATURE_MAX_VALUE
+                                                )
+
+                                                fccdTopDrawerViewModel.setSeatTemperature(
+                                                    fccdTopDrawerViewModel.getSeatSelection(if (context.isLHD()) SEAT_POSITION_DRIVER else SEAT_POSITION_PASSENGER),
+                                                    fccdTopDrawerViewModel.getSelectedSeatTemperature(value)
+                                                )
+                                            }
+
+                                            ValueType.CUSTOM_TEXT -> {}
+                                            ValueType.IMAGE -> {}
+                                        }
+                                    }
+                                },
+                                onIncrementBtnClick = { value: Float, valueType: ValueType ->
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val latestCurrent = if (context.isLHD()) fccdTopDrawerViewModel.driverSeatTemperature else fccdTopDrawerViewModel.passengerSeatTemperature
+                                        when (valueType) {
+                                            ValueType.NUMBER,
+                                            ValueType.NUMBER_WITH_MIN_MAX_TEXT
+                                                -> {
+
+                                                val current = if (context.isLHD()) fccdTopDrawerViewModel.driverSeatTemperature else fccdTopDrawerViewModel.passengerSeatTemperature
+
+                                                decrementDriverButtonState.value = if (current == fccdTopDrawerViewModel.minIntensityListValue) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+                                                incrementDriverButtonState.value = if (current == TEMPERATURE_MAX_VALUE) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+
+                                                val next = when {
+                                                    // If OFF, jump to Max Heat (3)
+                                                    latestCurrent == TEMPERATURE_OFF_VALUE -> SeatsTemperatureViewModel.TEMPERATURE_MAX_VALUE
+                                                    // Otherwise, just step up
+                                                    else -> latestCurrent + TEMPERATURE_INCREMENT
+                                                }.coerceIn(
+                                                    if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE,
+                                                    SeatsTemperatureViewModel.TEMPERATURE_MAX_VALUE
+                                                )
+
+                                                fccdTopDrawerViewModel.setSeatTemperature(
+                                                    fccdTopDrawerViewModel.getSeatSelection(if (context.isLHD()) SEAT_POSITION_DRIVER else SEAT_POSITION_PASSENGER),
+                                                    fccdTopDrawerViewModel.getSelectedSeatTemperature(next)
+                                                )
+                                            }
+
+                                            ValueType.CUSTOM_TEXT -> {}
+                                            ValueType.IMAGE -> {}
+                                        }
+                                    }
+                                },
+                                darkMode = false,
+                                inverse = (context.isRHD()),
+                                valueBottomTextBoxState = if (context.isLHD()) fccdTopDrawerViewModel.driverSeatTemperature else fccdTopDrawerViewModel.passengerSeatTemperature,
+                                valueBottomTextBoxPosition = 0,
+                                buttonClick = {
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val driverSeatPosition = if (context.isLHD()) SEAT_POSITION_DRIVER else SEAT_POSITION_PASSENGER
+                                        launcherInteractor.setShouldOpenSeatsSelectedScreen(driverSeatPosition)
+                                        JeaLogger.debug("setShouldOpenSeatsSelectedScreen", "DrawerOpensSeats")
+                                        if (!topDrawerInteractor.isDrawerHidden.value) {
+                                            topDrawerInteractor.setHideDrawerFlag(true)
+                                            JeaLogger.debug("setHideDrawerFlag", "DrawerOpensSeats")
+                                        }
+                                        if (!launcherInteractor.isSeatsPageScreen.value) {
+                                            launcherInteractor.setNavigationStatus(true)
+                                            launcherInteractor.setShouldOpenHomeListScreen(false)
+                                            launcherInteractor.setShouldOpenSeatsScreen(true)
+                                            JeaLogger.debug("setShouldOpenSeatsScreen", "DrawerOpensSeats")
+                                        }
+                                        if (!isDrawerFullClosed.value) {
+                                            drawerEvent.closeDrawer()
+                                        }
+                                    }
+                                },
+                                isTextCircularButtonCLickEnabled = !fccdTopDrawerViewModel.isModeTransport,
+                                isComponentClickEnabled = !fccdTopDrawerViewModel.isModeTransport
+                            )
+                        )
+                    }
+
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun MiddleColumnGroup(
+        fccdTopDrawerViewModel: FccdTopDrawerViewModel,
+        efficientAutoMode: EfficientAutoMode?,
+        showContent: Boolean,
+        showBubble: Boolean,
+        tempValue: Float
+    ) {
+        val syncButtonState: State<Boolean> = fccdTopDrawerViewModel.syncButtonState.collectAsState()
+        val lowPowerModeEnabled: State<Boolean> = fccdTopDrawerViewModel.lowPowerModeEnabled.collectAsState()
+        val showAwayButton: Boolean = fccdTopDrawerViewModel.awayModeStateHandler
+            .isAwayModeEnabled.collectAsState().value
+        val awayModeStatus: Boolean = fccdTopDrawerViewModel.awayModeStateHandler
+            .awayModeStatus.collectAsState().value
+        val autoButtonState: State<Boolean> = fccdTopDrawerViewModel.frontAutoButtonState.collectAsState()
+        val maxAcButtonState = fccdTopDrawerViewModel.maxAcButtonState.collectAsState().value
+        val acButtonState = fccdTopDrawerViewModel.acButtonState.collectAsState().value
+        val recirculationState = fccdTopDrawerViewModel.recirculationButtonState.collectAsState().value
+        val climateFrontRowPowerButtonState = fccdTopDrawerViewModel.climateFrontRowPowerButtonState.collectAsState().value
+
+        val baseW = 120.dp
+        val baseH = 60.dp
+        val pulseW = 160.dp
+        val pulseH = 80.dp
+        val shrinkDurationMs = BUBBLE_ANIMATION_DURATION
+        val textFadeDurationMs = ANIMATION_TIMEOUT_300_MIL_SECOND
+        val bubbleFadeDurationMs = TIMEOUT_400_MIL_SECOND
+        var localBubbleVisible by remember { mutableStateOf(false) }
+        var middleRevealGate by remember { mutableStateOf(showContent) }
+        var inEndSequence by remember { mutableStateOf(false) }
+        var targetW by remember { mutableStateOf(baseW) }
+        var targetH by remember { mutableStateOf(baseH) }
+        var textAlphaTarget by remember { mutableStateOf(COERCE_MAX) }
+        var bubbleAlphaTarget by remember { mutableStateOf(COERCE_MAX) }
+        val isDragging = showBubble && !showContent
+        val animatedWidth by animateDpAsState(
+            targetValue = targetW,
+            animationSpec = tween(
+                durationMillis = if (inEndSequence) shrinkDurationMs else ANIMATION_TIMEOUT_300_MIL_SECOND,
+                easing = FastOutSlowInEasing
             )
         )
-    }
-}
-
-@Throws(IOException::class)
-private fun convertBase64StringToPdfAndStoreIt(base64Pdf: String, webURL: String) {
-    // Determine the file name and folder location
-    val fileName = if (webURL.contains(context.getString(R.string.beneficiary_change))) {
-        "glic_customer_doc.pdf"
-    } else {
-        "glic_customer_doc_temp.pdf"
-    }
-
-    val downloadDir: File = File(
-        if (webURL.contains(context.getString(R.string.beneficiary_change))) {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        } else {
-            context.cacheDir
-        },
-        fileName
-    )
-
-    // Handle duplicate files by appending an index to the file name
-    var uniqueFile = downloadDir
-    var fileIndex = 1
-    while (uniqueFile.exists()) {
-        uniqueFile = File(
-            uniqueFile.parent,
-            "${fileName.substringBeforeLast(".")}_$fileIndex.${fileName.substringAfterLast(".")}"
+        val animatedHeight by animateDpAsState(
+            targetValue = targetH,
+            animationSpec = tween(
+                durationMillis = if (inEndSequence) shrinkDurationMs else ANIMATION_TIMEOUT_300_MIL_SECOND,
+                easing = FastOutSlowInEasing
+            )
         )
-        fileIndex++
-    }
 
-    // Decode Base64 string and write it to the file
-    val pdfAsBytes = Base64.decode(
-        base64Pdf.replaceFirst("data:.*;base64,".toRegex(), ""),
-        Base64.DEFAULT
-    )
-
-    uniqueFile.outputStream().use { os ->
-        os.write(pdfAsBytes)
-        os.flush()
-    }
-
-    // Notify user and handle further actions
-    if (uniqueFile.exists()) {
-        if (webURL.contains(context.getString(R.string.beneficiary_change))) {
-            Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
-        } else {
-            openRemotePDFScreen(uniqueFile)
-        }
-    }
-}
-fun savePdfToDownloads(context: Context, base64Pdf: String, fileName: String) {
-    val resolver = context.contentResolver
-    val downloadsUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-
-    // Check if file exists and delete it
-    val existingUri = resolver.query(
-        downloadsUri,
-        arrayOf(MediaStore.MediaColumns._ID),
-        "${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
-        arrayOf(fileName),
-        null
-    )?.use { cursor ->
-        if (cursor.moveToFirst()) {
-            val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
-            MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY, id)
-        } else null
-    }
-
-    existingUri?.let { resolver.delete(it, null, null) }
-
-    // Decode Base64 string
-    val pdfAsBytes = Base64.decode(
-        base64Pdf.replaceFirst("data:.*;base64,".toRegex(), ""),
-        Base64.DEFAULT
-    )
-
-    // Create ContentValues for the new file
-    val contentValues = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-        put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
-        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-    }
-
-    // Insert the file and write its content
-    val uri = resolver.insert(downloadsUri, contentValues)
-    uri?.let {
-        resolver.openOutputStream(it).use { outputStream ->
-            outputStream?.write(pdfAsBytes)
-        }
-        Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
-    } ?: throw IOException("Failed to create file")
-}
-
-
-try {
-    val uri = resolver.insert(downloadsUri, contentValues)
-    uri?.let {
-        resolver.openOutputStream(it).use { outputStream ->
-            outputStream?.write(pdfAsBytes)
-        }
-        Toast.makeText(context, "Downloaded Successfully...", Toast.LENGTH_LONG).show()
-    } ?: throw IOException("Failed to create file")
-} catch (e: IOException) {
-    // Show a Toast with the exception message
-    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
-    e.printStackTrace() // Log the exception for debugging
-}
-setContent {
-    // Observe the state directly and let Compose handle recompositions
-    val routeScreen by homeActivityViewModel.isAppUpdated
-        .map { appUpdated ->
-            if (appUpdated) Screen.WhatsNewScreen.route else Screen.MainScreen.route
-        }
-        .collectAsState(initial = Screen.MainScreen.route)
-
-    // Pass the state to the NavigationGraph
-    NavigationGraph(routeScreen)
-}
-
- lifecycleScope.launch {
-            homeActivityViewModel.isAppUpdated.collect{
-               k= if (it){
-                    Screen.WhatsNewScreen.route
-                }
-                else{
-                    Screen.MainScreen.route
-                }
-           
+        val textAlpha by animateFloatAsState(
+            targetValue = textAlphaTarget,
+            animationSpec = tween(durationMillis = textFadeDurationMs)
+        )
+        val bubbleAlpha by animateFloatAsState(
+            targetValue = bubbleAlphaTarget,
+            animationSpec = tween(durationMillis = bubbleFadeDurationMs)
+        )
+        LaunchedEffect(isDragging, showBubble) {
+            if (isDragging) {
+                localBubbleVisible = true
+                middleRevealGate = false
+                inEndSequence = false
+                bubbleAlphaTarget = COERCE_MAX
+                textAlphaTarget = COERCE_MAX
+                targetW = pulseW; targetH = pulseH
+                delay(ANIMATION_TIMEOUT_300_MIL_SECOND.toLong())
+                targetW = baseW; targetH = baseH
             }
-            
-        }
-        setContent{
-            NavigationGraph(k)
         }
 
+        LaunchedEffect(showContent) {
+            if (showContent && localBubbleVisible) {
+                inEndSequence = true
+                middleRevealGate = false
+                targetW = baseW; targetH = baseH
+                textAlphaTarget = COERCE_MIN
+                delay(textFadeDurationMs.toLong())
+                bubbleAlphaTarget = COERCE_MIN
+                delay(bubbleFadeDurationMs.toLong())
+                inEndSequence = false
+                localBubbleVisible = false
+                bubbleAlphaTarget = COERCE_MAX
+                textAlphaTarget = COERCE_MAX
+                middleRevealGate = true
+            }
+        }
+        Column(
+            modifier = Modifier
+                .height(dimensionResource(R.dimen.fccd_drawer_middle_column_height))
+                .width(dimensionResource(R.dimen.fccd_drawer_middle_column_width)),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (!isDetoxModeEnabled) {
+                if (showBubble || localBubbleVisible) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .offset(y = dimensionResource(R.dimen.fccd_bubble_slider_offset))
+                                .width(animatedWidth)
+                                .height(animatedHeight)
+                                .graphicsLayer { alpha = bubbleAlpha }
+                                .shadow(
+                                    dimensionResource(R.dimen.fccd_bubble_shadow_elevation),
+                                    spotColor = colorResource(R.color.fccd_drawer_bubble_spot_color),
+                                    ambientColor = colorResource(R.color.fccd_drawer_bubble_spot_color),
+                                    shape = RoundedCornerShape(animatedHeight / 2)
+                                )
+                                .background(
+                                    color = JeaCommonTheme.colorPalette.Light_Surface_Fill_Climate_Airflow_Button,
+                                    shape = RoundedCornerShape(animatedHeight / 2)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (fccdTopDrawerViewModel.isDriverTemperatureSelected) {
+
+                                    if (fccdTopDrawerViewModel.isTemperatureCelcius == true) {
+                                        when {
+                                            tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE -> stringResource(id = R.string.jea_climate_option_temp_hi)
+                                            tempValue <= TEMPERATURE_MIN_VALUE -> stringResource(id = R.string.jea_climate_option_temp_lo)
+                                            else -> "${tempValue}$TEMPERATURE_UNIT"
+                                        }
+                                    } else {
+                                        when {
+                                            tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE -> stringResource(id = R.string.jea_climate_option_temp_hi)
+                                            tempValue <= TEMPERATURE_MIN_VALUE -> stringResource(id = R.string.jea_climate_option_temp_lo)
+                                            else -> {
+                                                val f = celsiusToFahrenheit(tempValue)
+                                                "${f.toInt()}$TEMPERATURE_UNIT"
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (fccdTopDrawerViewModel.isTemperatureCelcius == true) {
+                                        when {
+                                            tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER -> TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER.toString()
+                                            tempValue <= TEMPERATURE_MIN_VALUE_PASSENGER -> TEMPERATURE_MIN_VALUE_PASSENGER.toString()
+                                            else -> "${tempValue}$TEMPERATURE_UNIT"
+                                        }
+                                    } else {
+                                        when {
+                                            tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER -> TemperatureStateHandler.TEMPERATURE_MAX_VALUE_FAHRENHEIT_PASSENGER.toString()
+                                            tempValue <= TEMPERATURE_MIN_VALUE_PASSENGER -> TEMPERATURE_MIN_VALUE_FAHRENHEIT_PASSENGER.toString()
+                                            else -> {
+                                                val f = celsiusToFahrenheit(tempValue)
+                                                "${f.toInt()}$TEMPERATURE_UNIT"
+                                            }
+                                        }
+                                    }
+                                },
+                                color = JeaCommonTheme.colorPalette.Light_Text_Default,
+                                style = JeaCommonTheme.typography.largeSentenceOrTitle37pt,
+                                modifier = Modifier.graphicsLayer { alpha = textAlpha }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+
+                Box {
+                    val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                    val dragOffset by animateDpAsState(
+                        if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                        else dimensionResource(R.dimen.fccd_drawer_animation_target_offset),
+                        tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        //Recirculation case
+                        if (fccdTopDrawerViewModel.inhibitStatus?.isHFSClimateAvailable == true) {
+                            JeaClimateBtn(
+                                state = JeaClimateBtnState(
+                                    variant = JeaClimateBtnVariant.BtnWithIcon(
+                                        iconRes = R.drawable.jea_climate_recirculation,
+                                        contentDescription = stringResource(id = R.string.jea_climate_contentdescription_airflow)
+                                    ),
+                                    buttonState = if (recirculationState) ClimateBtnStates.SELECTED else ClimateBtnStates.SELECTABLE,
+                                    onClick = { fccdTopDrawerViewModel.toggleRecirculation() },
+                                    isRemoveBG = !recirculationState,
+                                    isDeferredClickAllowed = true
+                                )
+                            )
+                        } else {  //Heated Mirror case
+                            JeaClimateBtn(
+                                state = JeaClimateBtnState(
+                                    variant = JeaClimateBtnVariant.BtnWithIcon(
+                                        iconRes = R.drawable.jea_heated_mirror,
+                                        contentDescription = stringResource(id = R.string.jea_climate_contentdescription_airflow)
+                                    ),
+                                    buttonState = if (fccdTopDrawerViewModel.sideMirrorHeat?.state == HeatedDoorMirrors.DEFROSTER_MODE_ON)
+                                        ClimateBtnStates.SELECTED
+                                    else ClimateBtnStates.SELECTABLE,
+                                    onClick = { fccdTopDrawerViewModel.switchSideMirrorHeat() },
+                                    isRemoveBG = fccdTopDrawerViewModel.sideMirrorHeat?.state != HeatedDoorMirrors.DEFROSTER_MODE_ON,
+                                    isDeferredClickAllowed = true
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (showAwayButton) dimensionResource(R.dimen.fccd_top_drawer_gap_between_components_away_mode) else dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+
+                Box {
+                    val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                    val dragOffset by animateDpAsState(
+                        if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                        else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaClimateBtn(
+                            state = JeaClimateBtnState(
+                                variant = JeaClimateBtnVariant.BtnWithIcon(
+                                    iconRes = if (syncButtonState.value) R.drawable.jea_sync_selected else R.drawable.jea_sync_selectable,
+                                    contentDescription = stringResource(id = R.string.jea_sync_text)
+                                ),
+                                buttonState = if (!lowPowerModeEnabled.value && climateFrontRowPowerButtonState) {
+                                    JeaLogger.debug("climateFrontRowPowerButtonState :{$climateFrontRowPowerButtonState $lowPowerModeEnabled}")
+                                    if (syncButtonState.value) ClimateBtnStates.SELECTED else ClimateBtnStates.SELECTABLE
+                                } else {
+                                    JeaLogger.debug("Else climateFrontRowPowerButtonState ::{$climateFrontRowPowerButtonState $lowPowerModeEnabled}")
+                                    ClimateBtnStates.DISABLED
+                                },
+                                onClick = { fccdTopDrawerViewModel.toggleSyncButtonState() },
+                                isRemoveBG = !syncButtonState.value || !climateFrontRowPowerButtonState,
+                                isDeferredClickAllowed = true
+                            )
+                        )
+                    }
+                }
+
+                if (showAwayButton) {
+                    Box {
+                        val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                        val dragOffset by animateDpAsState(
+                            if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                            else dimensionResource(R.dimen.fccd_drawer_animation_target_offset),
+                            tween(TIMEOUT_400_MIL_SECOND)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .alpha(dragAlpha)
+                                .offset(y = dragOffset)
+                                .blockParentDragWhilePressed(false)
+                        ) {
+                            val jeaCircularButtonConfig = JeaTheme.configProvider.jeaCircularButtonConfig
+                            JeaCircularButton(
+                                JeaCircularButtonState(
+                                    iconResId = R.drawable.jea_away_mode,
+                                    showBg = false,
+                                    mode = com.jlr.ui.State(selected = awayModeStatus, enabled = !lowPowerModeEnabled.value),
+                                    onClick = {
+                                        if (!awayModeStatus) {
+                                            awayModePopup.showPopUp()
+                                            fccdTopDrawerViewModel.awayModeStateHandler.setAwayMode(ClimateAway.CLIMATE_AWAY_MODE_ON)
+                                            Log.d("AwayMode", awayModeStatus.toString())
+                                        } else {
+                                            fccdTopDrawerViewModel.awayModeStateHandler.setAwayMode(ClimateAway.CLIMATE_AWAY_MODE_OFF)
+                                            Log.d("AwayMode", awayModeStatus.toString())
+                                        }
+                                    },
+                                    interactionMode = CircularBtnInteractionMode.DEFERRED_CLICK
+                                ),
+                                jeaCircularButtonConfig
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (showAwayButton) dimensionResource(R.dimen.fccd_top_drawer_gap_between_components_away_mode) else dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+
+                if (!isDetoxModeEnabled) {
+                    Box {
+                        val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                        val dragOffset by animateDpAsState(
+                            if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                            else dimensionResource(R.dimen.fccd_drawer_animation_target_offset),
+                            tween(TIMEOUT_400_MIL_SECOND)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .alpha(dragAlpha)
+                                .offset(y = dragOffset)
+                                .blockParentDragWhilePressed(false)
+                        ) {
+                            JeaClimateBtn(
+                                state = JeaClimateBtnState(
+                                    variant = if (efficientAutoMode?.isEnabled == true) {
+                                        JeaClimateBtnVariant.BtnWithIcon(
+                                            iconRes = if (autoButtonState.value) R.drawable.jea_efficient_heating_selected else R.drawable.jea_efficient_heating_selectable,
+                                            contentDescription = stringResource(id = R.string.jea_auto_text)
+                                        )
+                                    } else {
+                                        JeaClimateBtnVariant.BtnWithIcon(
+                                            iconRes = R.drawable.jea_auto,
+                                            contentDescription = stringResource(id = R.string.jea_auto_text)
+                                        )
+                                    },
+                                    buttonState = if (!lowPowerModeEnabled.value && climateFrontRowPowerButtonState) {
+                                        JeaLogger.debug("climateFrontRowPowerButtonState :{$climateFrontRowPowerButtonState $lowPowerModeEnabled}")
+                                        if (autoButtonState.value) ClimateBtnStates.SELECTED else ClimateBtnStates.SELECTABLE
+                                    } else {
+                                        JeaLogger.debug("Else climateFrontRowPowerButtonState ::{$climateFrontRowPowerButtonState $lowPowerModeEnabled}")
+                                        ClimateBtnStates.DISABLED
+
+                                    },
+                                    onClick = { fccdTopDrawerViewModel.toggleFrontAutoButtonState() },
+                                    isRemoveBG = !autoButtonState.value || !climateFrontRowPowerButtonState,
+                                    isDeferredClickAllowed = true
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (showAwayButton) dimensionResource(R.dimen.fccd_top_drawer_gap_between_components_away_mode) else dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+
+                Box {
+                    val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                    val dragOffset by animateDpAsState(
+                        if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                        else dimensionResource(R.dimen.fccd_drawer_animation_target_offset),
+                        tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaCircularButton(
+                            JeaCircularButtonState(
+                                iconResId = if (maxAcButtonState) R.drawable.jea_climate_max_ac_selected else R.drawable.jea_climate_max_ac,
+                                mode = if (!lowPowerModeEnabled.value) {
+                                    if (maxAcButtonState) com.jlr.ui.State(selected = true) else com.jlr.ui.State(enabled = true)
+                                } else com.jlr.ui.State(enabled = false),
+                                showBg = (!lowPowerModeEnabled.value && climateFrontRowPowerButtonState && maxAcButtonState ),
+                                onClick = { fccdTopDrawerViewModel.toggleMaxACButtonState() },
+                            ),
+                            jeaCircularButtonConfig = JeaTheme.configProvider.jeaCircularButtonConfig.copy(
+                                jeaCircularButtonStyle = JeaCircularButtonStyle.LIGHT,
+
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (showAwayButton) dimensionResource(R.dimen.fccd_top_drawer_gap_between_components_away_mode) else dimensionResource(R.dimen.fccd_top_drawer_gap_between_group)))
+
+                Box {
+                    val dragAlpha by animateFloatAsState(if (middleRevealGate) COERCE_MAX else COERCE_MIN, tween(TIMEOUT_400_MIL_SECOND))
+                    val dragOffset by animateDpAsState(
+                        if (middleRevealGate) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset)
+                        else dimensionResource(R.dimen.fccd_drawer_animation_target_offset),
+                        tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaCircularButton(
+                            JeaCircularButtonState(
+                                iconResId = if (acButtonState) R.drawable.jea_climate_ac_selected else R.drawable.jea_climate_ac,
+                                mode = if (!lowPowerModeEnabled.value) {
+                                    if (acButtonState) com.jlr.ui.State(selected = true) else com.jlr.ui.State(enabled = true)
+                                } else com.jlr.ui.State(enabled = false),
+                                showBg =( !lowPowerModeEnabled.value && climateFrontRowPowerButtonState && acButtonState),
+                                onClick = { fccdTopDrawerViewModel.toggleACButtonState() },
+
+                            ),
+                            jeaCircularButtonConfig = JeaTheme.configProvider.jeaCircularButtonConfig.copy(
+                                jeaCircularButtonStyle = JeaCircularButtonStyle.LIGHT
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun RightColumnGroup(
+        fccdTopDrawerViewModel: FccdTopDrawerViewModel, showContent: Boolean, showBubble: Boolean,
+        onJeaACTempDragStart: () -> Unit,
+        onJeaACTempDragEnd: () -> Unit,
+        onTemperatureChange: (Float) -> Unit,
+        tempValue: Float,
+        isRightOpen: Boolean,
+        activeDragSide: String?
+    ) {
+        val rightClimateCurrentValue =
+            when (context.isLHD()) {
+                false -> fccdTopDrawerViewModel.frontRowLeftTemperature.collectAsState()
+                true -> fccdTopDrawerViewModel.frontRowRightTemperature.collectAsState()
+            }
+        val decrementPassengerButtonState = remember { mutableStateOf(com.jlr.ui.State(enabled = true)) }
+        val incrementPassengerButtonState = remember { mutableStateOf(com.jlr.ui.State(enabled = true)) }
+        var toastJob by remember { mutableStateOf<Job?>(null) }
+        val coroutineScope = rememberCoroutineScope()
+        val bubbleHeight = 50.dp
+        val bubbleWidth = 60.dp
+        val bubbleTargetHeight = 360.dp
+        val isTemperatureCelsius: Boolean = fccdTopDrawerViewModel.temperatureStateHandler.isTemperatureCelcius.collectAsState().value
+        val climateFrontRowPowerButtonState = fccdTopDrawerViewModel.climateFrontRowPowerButtonState.collectAsState().value
+
+
+        LaunchedEffect(key1 = rightClimateCurrentValue) {
+            JeaLogger.debug("LeftColumnGroup called rightClimateCurrentValue :$rightClimateCurrentValue ")
+        }
+
+        Column(
+            modifier = Modifier
+                .height(dimensionResource(R.dimen.fccd_drawer_right_column_height))
+                .width(dimensionResource(R.dimen.fccd_drawer_right_column_width)),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            var decrementButtonStatePassenger = if (rightClimateCurrentValue.value <= TemperatureStateHandler.TEMPERATURE_MIN_VALUE_PASSENGER) {
+                com.jlr.ui.State(enabled = false)
+            } else {
+                com.jlr.ui.State(enabled = true)
+            }
+            var incrementButtonStatePassenger = if (rightClimateCurrentValue.value >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER) {
+                com.jlr.ui.State(enabled = false)
+            } else {
+                com.jlr.ui.State(enabled = true)
+            }
+
+            if (showBubble) {
+
+                if (isRightOpen) {
+                    var expanded by remember { mutableStateOf(false) }
+                    var visible by remember { mutableStateOf(true) }
+
+                    // Animate height from bubble to slider and back
+                    val animatedHeight by animateDpAsState(
+                        targetValue = if (expanded) bubbleTargetHeight else bubbleHeight,
+                        animationSpec = tween(durationMillis = BUBBLE_ANIMATION_DURATION, easing = FastOutSlowInEasing)
+                    )
+
+                    // Animate alpha for fade in/out
+                    val animatedAlpha by animateFloatAsState(
+                        targetValue = if (visible) COERCE_MAX else COERCE_MIN,
+                        animationSpec = tween(durationMillis = 400)
+                    )
+
+                    val bubbleWidth = bubbleWidth
+
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(bubbleWidth)
+                                .height(animatedHeight)
+                                .offset(y = dimensionResource(R.dimen.fccd_slider_yoffset))
+                                .alpha(animatedAlpha)
+                                .clip(RoundedCornerShape(dimensionResource(R.dimen.fccd_slider_corner_radius)))
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.jea_climate_slider),
+                                contentDescription = stringResource(R.string.jea_content_description_fccd_drawer),
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    // Start expansion when bubble appears
+                    LaunchedEffect(Unit) {
+                        expanded = true
+                    }
+
+                    // Reverse when drag ends
+                    LaunchedEffect(showContent) {
+                        if (showContent) {
+                            expanded = false // Shrink back
+                            delay(600)       // Wait for shrink animation
+                            visible = false  // Fade out
+                        }
+                    }
+                }
+            }
+            Box {
+                val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = false, isRightColumn = true)
+                val dragOffset by animateDpAsState(
+                    if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                )
+                Box(
+                    modifier = Modifier
+                        .alpha(dragAlpha)
+                        .offset(y = dragOffset)
+                        .blockParentDragWhilePressed(enabled = showBubble && isRightOpen)
+                ) {
+                    val isColumnReversed = !context.isLHD()
+                    JeaAcTemp(
+                        jeaAcTempsConfig = JeaTheme.configProvider.jeaAcTempsConfig.copy(
+                            minValue = if (isTemperatureCelsius) TEMPERATURE_MIN_VALUE else TEMPERATURE_MIN_VALUE_FAHRENHEIT,
+                            maxValue = if (isTemperatureCelsius) TemperatureStateHandler.Companion.TEMPERATURE_MAX_VALUE else TEMPERATURE_MAX_VALUE_FAHRENHEIT,
+                            minValueTextString = stringResource(if (isTemperatureCelsius) R.string.jea_climate_option_temp_low_celcius_passenger else R.string.jea_climate_option_temp_low_fahrenheit_passenger),
+                            maxValueTextString = stringResource(if (isTemperatureCelsius) R.string.jea_climate_option_temp_hi_celcius_passenger else R.string.jea_climate_option_temp_hi_fahrenheit_passenger),
+                            stepValue = TemperatureStateHandler.TEMPERATURE_STEP_VALUE,
+                            offTextString = if (climateFrontRowPowerButtonState) null else stringResource(R.string.jea_climate_option_temp_off),
+                        ),
+                        jeaAcTempState = JeaAcTempState(
+                            shouldShowFloat = isTemperatureCelsius,
+                            isEnable = !lowPowerModeEnabled,
+                            decrementButtonState = decrementButtonStatePassenger,
+                            incrementButtonState = incrementButtonStatePassenger,
+                            onDecrementBtnClick = { value: Float, valueType: ValueType ->
+                                JeaLogger.info(message = "will decrement front right temp, current temp is ${rightClimateCurrentValue.value}", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                fccdTopDrawerViewModel.isDriverTemperatureSelected = false
+                                val nextValue = rightClimateCurrentValue.value - TemperatureStateHandler.TEMPERATURE_STEP_VALUE
+                                if (nextValue >= TEMPERATURE_MIN_VALUE_PASSENGER) {
+                                    if (!isColumnReversed) {
+                                        fccdTopDrawerViewModel.setFrontRightSeatTemperature(nextValue)
+                                    } else {
+                                        fccdTopDrawerViewModel.setFrontLeftSeatTemperature(nextValue)
+                                    }
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+                            },
+                            buttonClick = {
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                if (!topDrawerInteractor.isDrawerHidden.value) {
+                                    topDrawerInteractor.setHideDrawerFlag(true)
+                                }
+                                if (!launcherInteractor.isTempPageScreen.value) {
+                                    launcherInteractor.setShouldOpenTempScreen(true)
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+                            },
+                            onIncrementBtnClick = { value: Float, valueType: ValueType ->
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                fccdTopDrawerViewModel.isDriverTemperatureSelected = false
+                                JeaLogger.info(message = "will increment front right temp, current temp is ${rightClimateCurrentValue.value}", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                val nextValue = rightClimateCurrentValue.value + TemperatureStateHandler.TEMPERATURE_STEP_VALUE
+                                if (nextValue <= TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER) {
+                                    if (!isColumnReversed) {
+                                        fccdTopDrawerViewModel.setFrontRightSeatTemperature(nextValue)
+                                    } else {
+                                        fccdTopDrawerViewModel.setFrontLeftSeatTemperature(nextValue)
+                                    }
+                                }
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+                            },
+                            isDetoxModeActive = isDetoxModeEnabled,
+                            darkMode = false,
+                            valueBottomTextBoxState = if (fccdTopDrawerViewModel.isTemperatureCelcius == true) rightClimateCurrentValue.value
+                            else {
+                                val currentCelsius = rightClimateCurrentValue.value
+                                when {
+                                    currentCelsius <= minTempInCelsius -> minTempInFahrenheit.toFloat()
+                                    currentCelsius >= maxTempInCelsius -> maxTempInFahrenheit.toFloat()
+                                    else -> {
+                                        celsiusToFahrenheit(currentCelsius)
+                                    }
+                                }
+                            },
+                            dragEventAllowed = true,
+                            onDragStart =
+                                {
+                                    fccdTopDrawerViewModel.isDriverTemperatureSelected = false
+                                    fccdTopDrawerViewModel.isDrawerSlidable = false
+                                    onJeaACTempDragStart()
+                                },
+
+                            onDragEnd = {
+                                val setTempVal = when {
+                                    tempValue >= TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER -> TemperatureStateHandler.TEMPERATURE_MAX_VALUE_PASSENGER
+                                    tempValue <= TEMPERATURE_MIN_VALUE_PASSENGER -> TEMPERATURE_MIN_VALUE_PASSENGER
+                                    else -> tempValue
+                                }
+                                if (!isColumnReversed) {
+                                    fccdTopDrawerViewModel.setFrontRightSeatTemperature(setTempVal)
+                                } else {
+                                    fccdTopDrawerViewModel.setFrontLeftSeatTemperature(setTempVal)
+                                }
+                                onJeaACTempDragEnd()
+                                JeaLogger.info("TempProgressVal= $tempValue", tag = "FCCDDragVal")
+                                fccdTopDrawerViewModel.isDrawerSlidable = true
+
+                            },
+
+                            onDragInProgress = { progressVal ->
+                                fccdTopDrawerViewModel.isDrawerSlidable = false
+                                onTemperatureChange(rightClimateCurrentValue.value + (progressVal.toFloat() / 2))
+                                JeaLogger.info("DragVal= $progressVal", tag = "FCCDDragVal")
+                            }
+                        )
+                    )
+                }
+
+            }
+
+            Spacer(modifier = Modifier.height(dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+            if (!isDetoxModeEnabled) {
+                Box {
+                    val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = false, isRightColumn = true)
+                    val dragOffset by animateDpAsState(
+                        if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaCircularButton(
+                            JeaCircularButtonState(
+                                iconResId = if (fccdTopDrawerViewModel.gloveboxState?.state == GLOVEBOX_OFF) R.drawable.glovebox_locked else R.drawable.jea_glovebox,
+                                mode = com.jlr.ui.State(enabled = !fccdTopDrawerViewModel.isValetModeActivated),
+                                showBg = false,
+                                onClick = {
+                                    toastJob?.cancel()
+                                    toastJob = null
+                                    if (fccdTopDrawerViewModel.gloveboxState?.state == GLOVEBOX_OFF) {
+                                        if (fccdTopDrawerViewModel.gearStatus?.isParkingGear == true) {
+                                            fccdTopDrawerViewModel.updateGloveBoxStatus()
+                                            JeaLogger.info(message = "Vehicle in Parking mode. Start unlocking glovebox", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                        } else {
+                                            JeaLogger.info(message = "Vehicle not in Parking mode. Show toast", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                            gloveBoxPopup.showPopUp()
+                                            toastJob = coroutineScope.launch {
+                                                delay(GLOVEBOX_TOAST_TIMEOUT)
+                                                gloveBoxPopup.dismiss()
+                                                toastJob = null
+                                            }
+                                            if (fccdTopDrawerViewModel.gloveBoxDoubleClick) {
+                                                JeaLogger.info(message = "Vehicle not in Parking mode. Starting to unlock glovebox after double click", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                                toastJob?.cancel()
+                                                toastJob = null
+                                                resetToast(fccdTopDrawerViewModel)
+                                                fccdTopDrawerViewModel.gloveBoxDoubleClick = false
+                                                fccdTopDrawerViewModel.updateGloveBoxStatus()
+                                            } else {
+                                                JeaLogger.info(message = "Vehicle not in Parking mode. Double click not done", module = "systembar", feature = "fccddrawer", fileName = "TopDrawerInflater")
+                                                fccdTopDrawerViewModel.gloveBoxDoubleClick = true
+                                            }
+                                        }
+                                    }
+                                },
+                                interactionMode = CircularBtnInteractionMode.DEFERRED_CLICK
+
+                            ),
+                            jeaCircularButtonConfig = JeaTheme.configProvider.jeaCircularButtonConfig.copy(
+                                jeaCircularButtonStyle = JeaCircularButtonStyle.LIGHT,
+                                padding = Padding(
+                                    top = dimensionResource(R.dimen.jea_glovebox_top_padding),
+                                    end = dimensionResource(R.dimen.jea_glovebox_right_padding),
+                                    bottom = dimensionResource(R.dimen.jea_glovebox_bottom_padding),
+                                    start = dimensionResource(R.dimen.jea_glovebox_left_padding)
+                                )
+                            )
+                        )
+                    }
+
+                }
+
+                Spacer(modifier = Modifier.height(dimensionResource(R.dimen.fccd_top_drawer_gap_between_components)))
+                Box {
+                    val passengerSeatTemperature = if (context.isLHD()) fccdTopDrawerViewModel.passengerSeatTemperature else fccdTopDrawerViewModel.driverSeatTemperature
+                    val dragAlpha = calculateDragAlpha(showContent, activeDragSide, isLeftColumn = false, isRightColumn = true)
+                    val dragOffset by animateDpAsState(
+                        if (showContent) dimensionResource(R.dimen.fccd_drawer_animation_initial_offset) else dimensionResource(R.dimen.fccd_drawer_animation_target_offset), tween(TIMEOUT_400_MIL_SECOND)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .alpha(dragAlpha)
+                            .offset(y = dragOffset)
+                            .blockParentDragWhilePressed(false)
+                    ) {
+                        JeaSeatTemp(
+                            JeaTheme.configProvider.jeaSeatTempConfig.copy(
+                                minValue = fccdTopDrawerViewModel.minIntensityListValue,
+                                maxValue = TEMPERATURE_MAX_VALUE
+                            ),
+                            JeaSeatTempState(
+                                isEnable = !fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport,
+                                decrementButtonState = if (fccdTopDrawerViewModel.isModeTransport) com.jlr.ui.State(enabled = false) else decrementPassengerButtonState.value,
+                                incrementButtonState = if (fccdTopDrawerViewModel.isModeTransport) com.jlr.ui.State(enabled = false) else incrementPassengerButtonState.value,
+                                onDecrementBtnClick = { value: Float, valueType: ValueType ->
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val latestCurrent = if (context.isLHD()) fccdTopDrawerViewModel.passengerSeatTemperature else fccdTopDrawerViewModel.driverSeatTemperature
+                                        when (valueType) {
+                                            ValueType.NUMBER,
+                                            ValueType.NUMBER_WITH_MIN_MAX_TEXT
+                                                -> {
+
+                                                decrementPassengerButtonState.value = if (passengerSeatTemperature == fccdTopDrawerViewModel.minIntensityListValue) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+                                                incrementPassengerButtonState.value = if (passengerSeatTemperature == TEMPERATURE_MAX_VALUE) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+
+                                                val next = when {
+                                                    // Special Case: If the seat is currently OFF, first down press goes to -3 (Max Cool)
+                                                    latestCurrent == TEMPERATURE_OFF_VALUE -> {
+                                                        if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL
+                                                        else TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+                                                    }
+                                                    // Standard Case: Just decrement by 1 and let coerceIn handle the boundaries
+                                                    else -> latestCurrent - TEMPERATURE_INCREMENT
+                                                }.coerceIn(
+                                                    if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE,
+                                                    Companion.TEMPERATURE_MAX_VALUE
+                                                )
+
+                                                fccdTopDrawerViewModel.setSeatTemperature(
+                                                    fccdTopDrawerViewModel.getSeatSelection(if (context.isLHD()) SEAT_POSITION_PASSENGER else SEAT_POSITION_DRIVER),
+                                                    fccdTopDrawerViewModel.getSelectedSeatTemperature(next)
+                                                )
+                                            }
+
+                                            ValueType.CUSTOM_TEXT -> {}
+                                            ValueType.IMAGE -> {}
+                                        }
+                                    }
+                                },
+                                onIncrementBtnClick = { value: Float, valueType: ValueType ->
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val latestCurrent = if (context.isLHD()) fccdTopDrawerViewModel.passengerSeatTemperature else fccdTopDrawerViewModel.driverSeatTemperature
+                                        when (valueType) {
+                                            ValueType.NUMBER,
+                                            ValueType.NUMBER_WITH_MIN_MAX_TEXT
+                                                -> {
+                                                decrementPassengerButtonState.value = if (passengerSeatTemperature == fccdTopDrawerViewModel.minIntensityListValue) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+                                                incrementPassengerButtonState.value = if (passengerSeatTemperature == TEMPERATURE_MAX_VALUE) {
+                                                    com.jlr.ui.State(enabled = false)
+                                                } else {
+                                                    com.jlr.ui.State(enabled = true)
+                                                }
+
+                                                val next = when {
+                                                    // If OFF, jump to Max Heat (3)
+                                                    latestCurrent == TEMPERATURE_OFF_VALUE -> SeatsTemperatureViewModel.TEMPERATURE_MAX_VALUE
+                                                    // Otherwise, just step up
+                                                    else -> latestCurrent + TEMPERATURE_INCREMENT
+                                                }.coerceIn(
+                                                    if (fccdTopDrawerViewModel.climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE,
+                                                    SeatsTemperatureViewModel.TEMPERATURE_MAX_VALUE
+                                                )
+
+                                                fccdTopDrawerViewModel.setSeatTemperature(
+                                                    fccdTopDrawerViewModel.getSeatSelection(if (context.isLHD()) SEAT_POSITION_PASSENGER else SEAT_POSITION_DRIVER),
+                                                    fccdTopDrawerViewModel.getSelectedSeatTemperature(next)
+                                                )
+                                            }
+
+                                            ValueType.CUSTOM_TEXT -> {}
+                                            ValueType.IMAGE -> {}
+                                        }
+                                    }
+                                },
+                                darkMode = false,
+                                inverse = (context.isLHD()),
+                                valueBottomTextBoxState = if (context.isLHD()) fccdTopDrawerViewModel.passengerSeatTemperature else fccdTopDrawerViewModel.driverSeatTemperature,
+                                valueBottomTextBoxPosition = 0,
+                                buttonClick = {
+                                    if (!fccdTopDrawerViewModel.isValetModeActivated && !fccdTopDrawerViewModel.isModeTransport) {
+                                        val passengerSeatPosition = if (context.isLHD()) SEAT_POSITION_PASSENGER else SEAT_POSITION_DRIVER
+                                        launcherInteractor.setShouldOpenSeatsSelectedScreen(passengerSeatPosition)
+                                        JeaLogger.debug("setShouldOpenSeatsSelectedScreen, Passenger", "DrawerOpensSeats")
+                                        if (!topDrawerInteractor.isDrawerHidden.value) {
+                                            topDrawerInteractor.setHideDrawerFlag(true)
+                                            JeaLogger.debug("setHideDrawerFlag, Passenger", "DrawerOpensSeats")
+                                        }
+                                        if (!launcherInteractor.isSeatsPageScreen.value) {
+                                            launcherInteractor.setNavigationStatus(true)
+                                            launcherInteractor.setShouldOpenHomeListScreen(false)
+                                            launcherInteractor.setShouldOpenSeatsScreen(true)
+                                            JeaLogger.debug("setShouldOpenSeatsScreen, Passenger", "DrawerOpensSeats")
+                                        }
+                                        if (!isDrawerFullClosed.value) {
+                                            drawerEvent.closeDrawer()
+                                        }
+                                    }
+                                },
+                                isTextCircularButtonCLickEnabled = !fccdTopDrawerViewModel.isModeTransport,
+                                isComponentClickEnabled = !fccdTopDrawerViewModel.isModeTransport
+                            )
+                        )
+                    }
+
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun calculateDragAlpha(
+        showContent: Boolean,
+        activeDragSide: String?,
+        isLeftColumn: Boolean,
+        isRightColumn: Boolean
+    ): Float {
+        if (activeDragSide == "left" && isRightColumn) return COERCE_MIN
+        if (activeDragSide == "right" && isLeftColumn) return COERCE_MIN
+
+        val revealReady = showContent && activeDragSide == null
+
+        var gateOpen by remember { mutableStateOf(false) }
+
+        LaunchedEffect(revealReady) {
+            gateOpen = false
+
+            if (revealReady) {
+                androidx.compose.runtime.withFrameNanos { /* sync to frame boundary */ }
+                gateOpen = true
+            }
+        }
+
+        return if (gateOpen) COERCE_MAX else COERCE_MIN
+    }
+
+}
+
+fun resetToast(fccdTopDrawerViewModel: FccdTopDrawerViewModel) {
+    fccdTopDrawerViewModel.showGloveBoxToast = false
+}
+
+fun Modifier.blockParentDragWhilePressed(enabled: Boolean): Modifier =
+    if (!enabled) this
+    else pointerInput(Unit) {
+        val touchSlop = viewConfiguration.touchSlop
+        awaitPointerEventScope {
+            while (true) {
+                val down = awaitFirstDown(
+                    pass = PointerEventPass.Initial,      // observe before children
+                    requireUnconsumed = false
+                )
+                var dx = 0f
+                var dy = 0f
+                var verticalDrag = false
+                val pointerId = down.id
+
+                while (down.pressed) {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == pointerId } ?: event.changes.first()
+                    val delta = change.positionChange()
+
+                    dx += abs(delta.x)
+                    dy += abs(delta.y)
+
+                    // Once user commits to vertical motion, stop consuming so parent can handle the drawer
+                    if (!verticalDrag && dy > touchSlop && dy > dx) {
+                        verticalDrag = true
+                    }
+
+                    if (!verticalDrag) {
+                        // Tap/press or horizontal movement stays handled by the child
+                        change.consume()
+                    }
+
+                    if (change.changedToUpIgnoreConsumed()) break
+                }
+            }
+        }
+    }
