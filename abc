@@ -1,74 +1,728 @@
+package com.jlr.jea.systembar.fccd.drawer
+
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.arch.core.executor.testing.InstantTaskExecutorRule
-import io.mockk.*
-import org.junit.Assert.*
-import org.junit.Before
-import org.junit.Rule
-import org.junit.Test
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.jlr.jea.climate.ui.state.AwayModeStateHandler
+import com.jlr.jea.climate.ui.state.TemperatureStateHandler
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_DRIVER
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_PASSENGER
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_REAR_LEFT
+import com.jlr.jea.core.SeatPosition.Companion.SEAT_POSITION_REAR_RIGHT
+import com.jlr.jea.core.logger.JeaLogger
+import com.jlr.systembar.core.api.coroutines.CoroutineDispatchers
+import com.jlr.systembar.core.api.coroutines.Dispatcher
+import com.jlr.systembar.core.api.coroutines.Dispatcher.DEFAULT
+import com.jlr.systembar.core.api.extension.collect
+import com.jlr.systembar.core.api.extension.logDebug
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.HeatSteeringWheel
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.annotation.HeatedDoorMirrors
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IEfficientAutoState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACACState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACAutoBlowerState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACAutoState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACClimatePreconditionState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACDefoggerState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACDistributionState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACDualState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACManualBlowerState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACMaxACState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACMaxDefrostState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACPowerState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACRecirculationState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACSteeringWheelHeatUseCase
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHVACTempState
+import com.jlr.systembar.vehiclecontrols.api.comfort.hvac.api.IHvacSideMirrorHeat
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_1
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_2
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_COOL_LEVEL_3
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_1
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_2
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_3
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.ClimateIntensity.Companion.SEAT_CLIMATE_INTENSITY_OFF
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatClimateState.Companion.SEAT_CLIMATE_STATE_OFF
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatClimateState.Companion.SEAT_CLIMATE_STATE_ON
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatSelection.Companion.SEAT_SELECTION_FIRST_ROW_LEFT
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatSelection.Companion.SEAT_SELECTION_FIRST_ROW_RIGHT
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatSelection.Companion.SEAT_SELECTION_SECOND_ROW_LEFT
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.annotation.SeatSelection.Companion.SEAT_SELECTION_SECOND_ROW_RIGHT
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.temperature.ISeatClimateAvailability
+import com.jlr.systembar.vehiclecontrols.api.comfort.seats.temperature.ISeatClimateIntensityLevel
+import com.jlr.systembar.vehiclecontrols.api.exterior.glovebox.IGloveBoxUseCase
+import com.jlr.systembar.vehiclecontrols.api.exterior.outsidetemperature.ITemperatureUnitState
+import com.jlr.systembar.vehiclecontrols.api.offroad.chesisView.IWheelInfoUseCase
+import com.jlr.systembar.vehiclecontrols.api.offroad.drivemodes.ILowPowerModeUseCase
+import com.jlr.systembar.vehiclecontrols.api.vehiclemode.IVehicleMode
+import com.jlr.systembar.vehiclecontrols.api.offroad.drivemodes.IValetModeUseCase
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.infoccf.InfoCCFEfficientAuto
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.infoccf.InhibitStatus
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.EfficientAutoMode
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacElectricDefrosterState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacRecircState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacSideMirrorHeat
+import com.jlr.systembar.vehiclecontrols.data.exterior.glovebox.GloveBoxState
+import com.jlr.systembar.vehiclecontrols.data.offroad.drivemodes.valetmode.ValetModeState
+import com.jlr.systembar.vehiclecontrols.data.vehiclestate.GearSelection
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacACState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacMaxAcState
+import com.jlr.systembar.vehiclecontrols.data.comfort.hvac.vhal.HvacSyncState
+import com.jlr.systembar.vehiclecontrols.data.exterior.outsidetemperature.TemperatureUnitState
 
-class HomeActivityViewModelTest {
+/**
+ * View model for Top Drawer Inflater
+ *
+ * @property hvacRecirculationUseCase
+ * @property hvacManualBlowerUseCase
+ * @property hvacAutoBlowerUseCase
+ * @property hvacACUseCase
+ * @property hvacMaxAcUseCase
+ * @property hvacDefoggerUseCase
+ * @property powerUseCase
+ * @property hvacDualUseCase
+ * @property hvacAutoUseCase
+ * @property hvacTempUseCase
+ * @property maxDefrostState
+ * @property hvacDistributionStateUseCase
+ * @property hvacClimatePreconditionUseCase
+ * @property coroutineScope
+ */
+class FccdTopDrawerViewModel @Inject constructor(
+    @CoroutineDispatchers(Dispatcher.MAIN) private val mainDispatcher: CoroutineDispatcher,
+    @CoroutineDispatchers(DEFAULT) private val default: CoroutineDispatcher,
+    @ApplicationContext val context: Context,
+    private val hvacRecirculationUseCase: IHVACRecirculationState,
+    private val hvacManualBlowerUseCase: IHVACManualBlowerState,
+    private val hvacAutoBlowerUseCase: IHVACAutoBlowerState,
+    private val hvacACUseCase: IHVACACState,
+    private val hvacMaxAcUseCase: IHVACMaxACState,
+    private val hvacDefoggerUseCase: IHVACDefoggerState,
+    private val powerUseCase: IHVACPowerState,
+    private val hvacDualUseCase: IHVACDualState,
+    private val hvacAutoUseCase: IHVACAutoState,
+    private val hvacTempUseCase: IHVACTempState,
+    private val maxDefrostState: IHVACMaxDefrostState,
+    private val hvacDistributionStateUseCase: IHVACDistributionState,
+    private val hvacClimatePreconditionUseCase: IHVACClimatePreconditionState,
+    private val hswUseCase: IHVACSteeringWheelHeatUseCase,
+    private val efficientAutoState: IEfficientAutoState,
+    private val coroutineScope: CoroutineScope,
+    private val recircState: IHVACRecirculationState,
+    private val hvacSideMirrorHeat: IHvacSideMirrorHeat,
+    private val seatClimateInfo: ISeatClimateAvailability,
+    private val climateIntensity: ISeatClimateIntensityLevel,
+    private val wheelUseCase: IWheelInfoUseCase,
+    private val gloveBoxComponents: IGloveBoxUseCase,
+    private val valetModeUseCase: IValetModeUseCase,
+    private val vehicleModeVal: IVehicleMode,
+    private val tempState: ITemperatureUnitState,
+    private val lowPowerModeUseCase: ILowPowerModeUseCase
+) : ViewModel() {
 
-    @get:Rule
-    val rule = InstantTaskExecutorRule() // For LiveData testing
+    private val tempValue = -1
+    val defrostButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val frontRowLeftTemperature: MutableStateFlow<Float> =
+        MutableStateFlow(TemperatureStateHandler.TEMPERATURE_DEFAULT_VALUE)
+    val recirculationButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val syncButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var hvacSyncState by mutableStateOf<HvacSyncState?>(null)
 
-    private lateinit var viewModel: HomeActivityViewModel
-    private lateinit var context: Context
-    private lateinit var sharedPreferences: SharedPreferences
-    private lateinit var editor: SharedPreferences.Editor
+    val frontRowRightTemperature: MutableStateFlow<Float> =
+        MutableStateFlow(TemperatureStateHandler.TEMPERATURE_DEFAULT_VALUE)
+    val steeringWheelHeatLevel: MutableStateFlow<Int> =
+        MutableStateFlow(HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_OFF)
+    val frontAutoButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var maxAcButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var acButtonState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var infoCCFEfficientAuto by mutableStateOf<InfoCCFEfficientAuto?>(null)
+    var hvacEfficientAutoMode: MutableStateFlow<EfficientAutoMode?> = MutableStateFlow<EfficientAutoMode?>(null)
+    var inhibitStatus by mutableStateOf<InhibitStatus?>(null)
+    var hvacRecircState by mutableStateOf<HvacRecircState?>(null)
+    var frontElectricDefrosterState by mutableStateOf<HvacElectricDefrosterState?>(null)
+    var rearElectricDefrosterState by mutableStateOf<HvacElectricDefrosterState?>(null)
+    var frontDefoggerState by mutableStateOf<Boolean>(false)
+    var rearDefoggerState by mutableStateOf<Boolean>(false)
+    private var firstLaunch by mutableStateOf(true)
+    var feedbackMessage by mutableStateOf(false)
+    private var lastInteractionTime by mutableStateOf(0L)
+    var sideMirrorHeat by mutableStateOf<HvacSideMirrorHeat?>(null)
+    var climateCoolFitment by mutableStateOf(false)
+    var hdmSoftBtnFitment by mutableStateOf(false)
+    var driverSeatTemperature by mutableStateOf<Float>(0f)
+    var passengerSeatTemperature by mutableStateOf<Float>(0f)
+    var minIntensityListValue by mutableStateOf<Float>(TEMPERATURE_MIN_VALUE_ZONE_DUAL)
+    var gearStatus by mutableStateOf<GearSelection?>(null)
+    var gloveboxState by mutableStateOf<GloveBoxState?>(null)
+    var showGloveBoxToast by mutableStateOf(false)
+    var gloveBoxDoubleClick by mutableStateOf(false)
+    var valetModeAvailability by mutableStateOf(false)
+    var valetModeState by mutableStateOf<ValetModeState?>(null)
+    var isValetModeActivated by mutableStateOf(false)
+    var isModeTransport by mutableStateOf(false)
+    var hvacMaxAcState by mutableStateOf<HvacMaxAcState?>(null)
+    var hvacAcState by mutableStateOf<HvacACState?>(null)
+    var tempUnitState by mutableStateOf<TemperatureUnitState?>(null)
+    var isTemperatureCelcius by mutableStateOf<Boolean?>(null)
+    var lowPowerModeEnabled: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var isDrawerSlidable by mutableStateOf(true)
+    var isDriverTemperatureSelected by mutableStateOf(true)
+    val climateFrontRowPowerButtonState: MutableStateFlow<Boolean> = MutableStateFlow(true)
 
-    @Before
-    fun setUp() {
-        context = mockk()
-        sharedPreferences = mockk()
-        editor = mockk()
 
-        every { context.getSharedPreferences(any(), any()) } returns sharedPreferences
-        every { sharedPreferences.getString(any(), any()) } returns null
-        every { sharedPreferences.edit() } returns editor
-        every { editor.putString(any(), any()) } returns editor
-        every { editor.apply() } just runs
+    /**
+     * @property temperatureStateHandler Contains State and business logic integration for Temperature screen
+     */
+    val temperatureStateHandler: TemperatureStateHandler = TemperatureStateHandler(
+        hvacACUseCase = hvacACUseCase,
+        hvacMaxAcUseCase = hvacMaxAcUseCase,
+        coroutineScope = viewModelScope,
+        hvacPowerState = powerUseCase,
+        hvacTempUseCase = hvacTempUseCase,
+        tempState = tempState,
+        lowPowerModeUseCase = lowPowerModeUseCase,
+        context = context
+    )
 
-        viewModel = HomeActivityViewModel(context)
+    init {
+        collectTemperatureUnitType()
+        initMaxDefrostState()
+        initFrontLeftTemp()
+        initRecirculation()
+        initSyncState()
+        initFrontRightTemp()
+        initSteeringWheelTemp()
+        initFrontAutoState()
+        initHvacEfficientAuto()
+        initHvacRecircState()
+        getClimateControlsInhibitStatus()
+        initFrontElectricDefrosterState()
+        initRearElectricDefrosterState()
+        getSideMirrorHeat()
+        infoCCFState()
+        infoCCFHdmSoftBtn()
+        selectedSeatTemperatureIntensityState()
+        getGearStatus()
+        getGloveboxState()
+        checkVehicleModeTransport()
+        collectValetModeState()
+        initMaxAcState()
+        initHvacAcState()
+        collectLPMState()
+
+        coroutineScope.launch {
+            powerUseCase.frontPowerState.collect() {
+                it?.let {
+                    climateFrontRowPowerButtonState.emit(it.isFrontOn)
+                    JeaLogger.debug("PowerAutoSyncStateHandler11 : climateFrontRowPowerButtonState:${it} ")
+                }
+            }
+        }
+
+        coroutineScope.launch {
+            powerUseCase.rearPowerState.collect() {
+                it?.let {
+                    climateFrontRowPowerButtonState.emit(it.isRearOn)
+                    JeaLogger.debug("PowerAutoSyncStateHandler222 : climateRearRowPowerButtonState:${it.isRearOn} ")
+                }
+            }
+        }
+
     }
 
-    @Test
-    fun `isAppUpdated returns true when version is updated`() {
-        // Mock version behavior
-        every { sharedPreferences.getString("VERSION_NAME", "0.0") } returns "1.0"
-        mockkStatic(BuildConfig::class)
-        every { BuildConfig.VERSION_NAME } returns "2.0"
-
-        val result = viewModel.isAppUpdated(context)
-
-        assertTrue(result)
-        verify { editor.putString("VERSION_NAME", "2.0") }
+    private fun collectTemperatureUnitType() {
+        tempState.temperatureUnitState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                isTemperatureCelcius = this@collect.isCelsius
+            }
+        }
     }
 
-    @Test
-    fun `isAppUpdated returns false when version is not updated`() {
-        // Mock version behavior
-        every { sharedPreferences.getString("VERSION_NAME", "0.0") } returns "2.0"
-        mockkStatic(BuildConfig::class)
-        every { BuildConfig.VERSION_NAME } returns "2.0"
-
-        val result = viewModel.isAppUpdated(context)
-
-        assertFalse(result)
+    private fun collectValetModeState() {
+        valetModeUseCase.valetModeState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                valetModeState = this@collect
+                valetModeAvailability = valetModeState?.isValetModeAvailable ?: false
+                isValetModeActivated = valetModeState?.isValetModeActive ?: false
+            }
+        }
     }
 
-    @Test
-    fun `isNewMajorVersion returns true when major version is updated`() {
-        val result = viewModel.isNewMajorVersion("1.0", "2.0")
-        assertTrue(result)
+    private fun initMaxDefrostState() {
+        coroutineScope.launch {
+            maxDefrostState.state.collect {
+                logDebug("collect change in maxDefrostState ${it?.isMaxDefrostOn}")
+                it?.let {
+                    defrostButtonState.emit(it.isMaxDefrostOn)
+                }
+            }
+        }
     }
 
-    @Test
-    fun `isNewMajorVersion returns false when version is same`() {
-        val result = viewModel.isNewMajorVersion("1.0", "1.0")
-        assertFalse(result)
+    private fun initFrontLeftTemp() {
+        coroutineScope.launch {
+            hvacTempUseCase.frontLeftTempState.collect {
+                it?.let {
+                    frontRowLeftTemperature.emit(it.temp)
+                    JeaLogger.debug("frontRowLeftTemperature : ${frontRowLeftTemperature.value}")
+
+                }
+            }
+        }
+    }
+
+    private fun initRecirculation() {
+        coroutineScope.launch {
+            hvacRecirculationUseCase.state.collect {
+                logDebug("collect change in hvacRecirculationUseCase")
+                it?.let {
+                    recirculationButtonState.emit(it.isAirRecirculationOn)
+                }
+            }
+        }
+    }
+
+    private fun initSyncState() {
+        coroutineScope.launch {
+            hvacDualUseCase.state.collect {
+                if (it != null) {
+                    hvacSyncState = it
+                    syncButtonState.emit(it.isSyncOn)
+                    JeaLogger.debug("hvacSyncState : $hvacSyncState")
+                    JeaLogger.debug("syncButtonState : $syncButtonState")
+
+                }
+            }
+        }
+    }
+
+    private fun initFrontRightTemp() {
+        coroutineScope.launch {
+            hvacTempUseCase.frontRightTempState.collect {
+                it?.let {
+                    frontRowRightTemperature.emit(it.temp)
+                    JeaLogger.debug("frontRowRightTemperature : ${frontRowRightTemperature.value}")
+
+                }
+            }
+        }
+    }
+
+    private fun initSteeringWheelTemp() {
+        coroutineScope.launch {
+            hswUseCase.steeringWheelHeat.collect {
+                logDebug("collect change in steering wheel heated level")
+                it?.let {
+                    steeringWheelHeatLevel.emit(it.state)
+                }
+            }
+        }
+    }
+
+    private fun initFrontAutoState() {
+        coroutineScope.launch {
+            hvacAutoUseCase.frontHvacAutoState.collect {
+                it?.let {
+                    frontAutoButtonState.emit(it.autoOn)
+                }
+            }
+        }
+    }
+
+    private fun initHvacRecircState() {
+        recircState.state.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                hvacRecircState = this@collect
+            }
+        }
+    }
+
+    private fun getClimateControlsInhibitStatus() {
+        recircState.inhibitStatus.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) { withContext(mainDispatcher) { inhibitStatus = this@collect } }
+    }
+
+    private fun initFrontElectricDefrosterState() {
+        hvacDefoggerUseCase.frontElectricDefrosterState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                frontElectricDefrosterState = this@collect
+                if (frontDefoggerState != frontElectricDefrosterState?.isFrontDefoggerOn && !firstLaunch) onHeatedScreenChanged()
+                firstLaunch = false
+                frontDefoggerState = frontElectricDefrosterState?.isFrontDefoggerOn == true
+                JeaLogger.debug("initFrontElectricDefrosterState: $frontDefoggerState ", "FccdTopDrawerViewModel")
+            }
+        }
+    }
+
+    private fun initRearElectricDefrosterState() {
+        hvacDefoggerUseCase.rearElectricDefrosterState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                rearElectricDefrosterState = this@collect
+                if (rearDefoggerState != rearElectricDefrosterState?.isRearDefoggerOn && !firstLaunch) onHeatedScreenChanged()
+                firstLaunch = false
+                rearDefoggerState = rearElectricDefrosterState?.isRearDefoggerOn == true
+                JeaLogger.debug("initRearElectricDefrosterState: $rearDefoggerState ", "FccdTopDrawerViewModel")
+
+            }
+        }
+    }
+
+    private fun getSideMirrorHeat() {
+        hvacSideMirrorHeat.sideMirrorHeatState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) { withContext(context = mainDispatcher) { sideMirrorHeat = this@collect } }
+    }
+
+    private fun getGearStatus() {
+        wheelUseCase.gearStatus.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) { withContext(context = mainDispatcher) { gearStatus = this@collect } }
+    }
+
+    private fun getGloveboxState() {
+        gloveBoxComponents.gloveBoxState.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) { withContext(context = mainDispatcher) { gloveboxState = this@collect } }
+    }
+
+    /**
+     * Collect and check if vehicle mode is transport or not
+     *
+     */
+    private fun checkVehicleModeTransport() {
+        vehicleModeVal.vehicleMode.collect(
+            coroutineScope = viewModelScope,
+            dispatcher = default
+        ) { withContext(context = mainDispatcher) { isModeTransport = this@collect.isTransportMode } }
+    }
+
+    private fun initMaxAcState() {
+        hvacMaxAcUseCase.state.collect(
+            coroutineScope = viewModelScope, dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                hvacMaxAcState = this@collect
+                maxAcButtonState.value = hvacMaxAcState?.maxAcOn == true
+                logDebug("Climate Max AC State = $hvacMaxAcState")
+            }
+        }
+    }
+
+    private fun initHvacAcState() {
+        hvacACUseCase.state.collect(
+            coroutineScope = viewModelScope, dispatcher = default
+        ) {
+            withContext(mainDispatcher) {
+                hvacAcState = this@collect
+                acButtonState.value = hvacAcState?.climateAcOn == true
+                logDebug("Climate AC State = $hvacAcState")
+            }
+        }
+    }
+
+    private fun collectLPMState() {
+        JeaLogger.debug("collect LPM State ${this@FccdTopDrawerViewModel.hashCode()}")
+        lowPowerModeUseCase.lowPowerModeState.collect(
+            coroutineScope = coroutineScope, dispatcher = default
+        ) {
+            withContext(mainDispatcher) { lowPowerModeEnabled.value = this@collect.isLPMEnable }
+        }
+    }
+
+
+    /**
+     * toggle maxDefrost state
+     *
+     */
+    fun toggleMaxDefrost() {
+        maxDefrostState.switchMaxDefrost(!defrostButtonState.value)
+    }
+
+    /**
+     *
+     * @param value
+     */
+    fun setFrontLeftSeatTemperature(value: Float) {
+        JeaLogger.debug("setFrontLeftSeatTemperature : $value")
+        hvacTempUseCase.setRow1LeftTemp(value)
+    }
+
+    /**
+     * toggle recirculation mode
+     *
+     */
+    fun toggleRecirculation() {
+        hvacRecirculationUseCase.switchRecirculation((hvacRecircState?.switch))
+    }
+
+    /**
+     * toggle sync button state
+     *
+     */
+    fun toggleSyncButtonState() {
+        hvacDualUseCase.switchSync(hvacSyncState?.switch)
+        JeaLogger.debug("hvacSyncState?.switch : ${hvacSyncState?.switch}")
+    }
+
+    /**
+     *
+     * @param value
+     */
+    fun setFrontRightSeatTemperature(value: Float) {
+        JeaLogger.debug("setFrontRightSeatTemperature : $value")
+        hvacTempUseCase.setRow1RightTemp(value)
+    }
+
+    /**
+     * Sets Steering wheel heat level in order off..1..2..off..
+     *
+     */
+    fun updateSteeringWheelLevel(steeringWheelStatus: Int) {
+        var updatedSteeringWheelStatus = when (steeringWheelStatus) {
+            HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_OFF -> HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_2
+            HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_1 -> HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_OFF
+            HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_2 -> HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_1
+            else -> {
+                HeatSteeringWheel.HSW_TEMPERATURE_LEVEL_OFF
+            }
+        }
+        logDebug("Steering Wheel Status = $updatedSteeringWheelStatus")
+        hswUseCase.setSteeringWheelHeatTemprature(updatedSteeringWheelStatus)
+    }
+
+    /**
+     * toggle auto button state
+     *
+     */
+    fun toggleFrontAutoButtonState() {
+        hvacAutoUseCase.switchFrontAuto(!frontAutoButtonState.value)
+    }
+
+    /**
+     *  sets Glove box status to ON
+     *
+     */
+    fun updateGloveBoxStatus() {
+        gloveBoxComponents.setGloveBoxState(GLOVEBOX_ON)
+    }
+
+    /**
+     * toggle max ac state
+     *
+     */
+    fun toggleMaxACButtonState() {
+        hvacMaxAcUseCase.switchMaxAC(hvacMaxAcState?.switch)
+    }
+
+    /**
+     * toggle ac state
+     *
+     */
+    fun toggleACButtonState() {
+        hvacACUseCase.switchAC(hvacAcState?.switch)
+    }
+
+    private fun initHvacEfficientAuto() {
+        coroutineScope.launch {
+            efficientAutoState.efficientAutoMode.collect() {
+                hvacEfficientAutoMode.value = it
+
+                logDebug("EfficientAuto : ${hvacEfficientAutoMode.value?.isEnabled}")
+            }
+        }
+    }
+
+    /**
+     * This method will sync required CCF states info from backend
+     */
+    private fun infoCCFState() {
+        viewModelScope.launch(default) {
+            withContext(mainDispatcher) {
+                climateCoolFitment = seatClimateInfo.getClimateInfoCCFRow1()?.isRow1CoolAvailable ?: false
+                minIntensityListValue = if (climateCoolFitment) TEMPERATURE_MIN_VALUE_ZONE_DUAL else TEMPERATURE_MIN_VALUE_ZONE_SINGLE
+                logDebug("climate cool fitment value $climateCoolFitment")
+            }
+        }
+    }
+
+    /**
+     * This method will sync required CCF states info from backend
+     */
+    private fun infoCCFHdmSoftBtn() {
+        viewModelScope.launch(default) {
+            withContext(mainDispatcher) {
+                hdmSoftBtnFitment = hvacSideMirrorHeat.getInfoHDM()?.isAvailable ?: false
+                logDebug("hdmSoftBtnFitment $hdmSoftBtnFitment")
+            }
+        }
+    }
+
+    /**
+     * This method will sync seat temperature intensity state from backend
+     */
+    private fun selectedSeatTemperatureIntensityState() {
+        climateIntensity.leftIntensity.collect(viewModelScope, default) {
+            withContext(mainDispatcher) {
+                if (this@collect.state == tempValue) return@withContext
+                driverSeatTemperature = getSelectedSeatTemperatureIntensity(this@collect.state)
+                logDebug("driver seat temperature value $driverSeatTemperature")
+            }
+        }
+
+        climateIntensity.rightIntensity.collect(viewModelScope, default) {
+            withContext(mainDispatcher) {
+                if (this@collect.state == tempValue) return@withContext
+                passengerSeatTemperature = getSelectedSeatTemperatureIntensity(this@collect.state)
+                logDebug("passenger seat temperature value $passengerSeatTemperature")
+            }
+        }
+    }
+
+    fun switchDefogger() {
+        hvacDefoggerUseCase.switchDefogger(lastInteractionLessThanTenSeconds(), frontDefoggerState, rearDefoggerState)
+        JeaLogger.debug("switchDefogger: $frontDefoggerState +,+ $rearDefoggerState +,+ $rearDefoggerState ", "FccdTopDrawerViewModel")
+    }
+
+    fun switchSideMirrorHeat() {
+        hvacSideMirrorHeat.switchSideMirrorHeat(data = if (sideMirrorHeat?.state == HeatedDoorMirrors.DEFROSTER_MODE_ON) HeatedDoorMirrors.DEFROSTER_MODE_OFF else HeatedDoorMirrors.DEFROSTER_MODE_ON)
+    }
+
+    fun setSeatTemperature(seatPosition: Int, intensityValue: Int) {
+        climateIntensity.setClimateIntensity(seatPosition, intensityValue)
+    }
+
+    /**
+     * @property awayModeStateHandler State handling and business logic integration for awayMode button.
+     */
+    val awayModeStateHandler: AwayModeStateHandler = AwayModeStateHandler(
+        awayModeState = hvacClimatePreconditionUseCase,
+        coroutineScope = viewModelScope
+    )
+
+    private fun onHeatedScreenChanged() {
+        feedbackMessage = true
+        viewModelScope.launch(default) {
+            delay(4000)
+            withContext(mainDispatcher) { feedbackMessage = false }
+        }
+    }
+
+    private fun lastInteractionLessThanTenSeconds(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val timeDifference = currentTime - lastInteractionTime
+        lastInteractionTime = currentTime
+        return timeDifference <= TIME_OUT
+    }
+
+    /**
+     *  seat temperature power switch state to toggle mapping
+     */
+    private fun getSelectedSeatTemperatureState(temperaturePowerState: Int): Boolean {
+        return when (temperaturePowerState) {
+            SEAT_CLIMATE_STATE_OFF -> false
+            SEAT_CLIMATE_STATE_ON -> true
+            else -> false
+        }
+    }
+
+    /**
+     *  seat temperature intensity level state to temperature value switcher mapping
+     */
+    private fun getSelectedSeatTemperatureIntensity(temperatureIntensity: Int): Float {
+        return when (temperatureIntensity) {
+            SEAT_CLIMATE_INTENSITY_OFF -> 0f
+            SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_1 -> 1f
+            SEAT_CLIMATE_INTENSITY_COOL_LEVEL_1 -> -1f
+            SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_2 -> 2f
+            SEAT_CLIMATE_INTENSITY_COOL_LEVEL_2 -> -2f
+            SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_3 -> 3f
+            SEAT_CLIMATE_INTENSITY_COOL_LEVEL_3 -> -3f
+            else -> 0f
+        }
+    }
+
+    /**
+     *  seat temperature value switcher to intensity level state mapping
+     */
+    fun getSelectedSeatTemperature(temperatureIntensity: Float): Int {
+        return when (temperatureIntensity) {
+            0f -> SEAT_CLIMATE_INTENSITY_OFF
+            1f -> SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_1
+            -1f -> SEAT_CLIMATE_INTENSITY_COOL_LEVEL_1
+            2f -> SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_2
+            -2f -> SEAT_CLIMATE_INTENSITY_COOL_LEVEL_2
+            3f -> SEAT_CLIMATE_INTENSITY_HEAT_LEVEL_3
+            -3f -> SEAT_CLIMATE_INTENSITY_COOL_LEVEL_3
+            else -> SEAT_CLIMATE_INTENSITY_OFF
+        }
+    }
+
+    /**
+     * selected seat position and vehicle seat area id mapping
+     */
+    fun getSeatSelection(selectedSeatPosition: Int): Int {
+        return when (selectedSeatPosition) {
+            SEAT_POSITION_DRIVER -> SEAT_SELECTION_FIRST_ROW_LEFT
+            SEAT_POSITION_PASSENGER -> SEAT_SELECTION_FIRST_ROW_RIGHT
+            SEAT_POSITION_REAR_LEFT -> SEAT_SELECTION_SECOND_ROW_LEFT
+            SEAT_POSITION_REAR_RIGHT -> SEAT_SELECTION_SECOND_ROW_RIGHT
+            else -> 0
+        }
+    }
+
+    /**
+     *  seat temperature power switch toggle to state mapping
+     */
+    private fun getPowerState(powerState: Boolean): Int {
+        return when (powerState) {
+            false -> SEAT_CLIMATE_STATE_OFF
+            true -> SEAT_CLIMATE_STATE_ON
+        }
+    }
+
+    companion object {
+        const val TIME_OUT = 10000
+        const val TEMPERATURE_OFF_VALUE = 0f
+        const val TEMPERATURE_MAX_VALUE = 3f
+        const val TEMPERATURE_MIN_VALUE_ZONE_DUAL = -3f
+        const val TEMPERATURE_MIN_VALUE_ZONE_SINGLE = 0f
+        const val GLOVEBOX_ON = 1
+        const val GLOVEBOX_OFF = 0
+        const val GLOVEBOX_TOAST_TIMEOUT = 8000L
+        const val TIMEOUT_ONE_SECOND = 1000L
+        const val TIMEOUT_600_MIL_SECOND = 600L
+        const val TIMEOUT_400_MIL_SECOND = 400
+        const val ANIMATION_TIMEOUT_300_MIL_SECOND = 300
+        const val TIMEOUT_300_MIL_SECOND = 300L
+
     }
 }
-
-
-
